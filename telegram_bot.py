@@ -2,10 +2,9 @@ import threading
 import telebot
 from telebot import types
 import database as db
-import db_cache as cache
+import database_supabase as db
 import config
 import datetime
-import database_supabase as db
 
 _bot = None
 BOT_USERNAME = None
