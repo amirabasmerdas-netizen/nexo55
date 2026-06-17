@@ -8,6 +8,11 @@ import config
 import datetime
 import time
 import random
+import logging
+
+# ─── تنظیم لاگ ──────────────────────────────────────────────────────────────────
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 _bot = None
 BOT_USERNAME = None
@@ -28,7 +33,7 @@ def get_user_account(tg_id: int):
     account = db.get_account_by_tg_id(tg_id)
     _user_cache[tg_id] = account
     _user_cache_time[tg_id] = now
-    print(f"🔍 جستجوی کاربر {tg_id} در دیتابیس: {account}")
+    logger.info(f"🔍 جستجوی کاربر {tg_id} در دیتابیس: {account}")
     return account
 
 def clear_user_cache(tg_id: int = None):
@@ -38,7 +43,7 @@ def clear_user_cache(tg_id: int = None):
     else:
         _user_cache.clear()
         _user_cache_time.clear()
-    print("✅ کش کاربران پاک شد")
+    logger.info("✅ کش کاربران پاک شد")
 
 # ─── کش تنظیمات ──────────────────────────────────────────────────────────────
 _user_settings_cache = {}
@@ -60,7 +65,7 @@ def get_cached_setting(owner_id: int, key: str, default=None):
 def clear_settings_cache():
     _user_settings_cache.clear()
     _cache_timestamps.clear()
-    print("✅ کش تنظیمات پاک شد")
+    logger.info("✅ کش تنظیمات پاک شد")
 
 # ─── متغیرهای چالش ──────────────────────────────────────────────────────────
 _waiting_for_bet_amount = {}  # {user_id: (bet_id, selected_team)}
@@ -74,19 +79,19 @@ def start_token_bot():
 
     try:
         test = db.get_all_accounts()
-        print(f"✅ اتصال به دیتابیس دائمی (Supabase) برقرار است! تعداد کاربران: {len(test)}")
+        logger.info(f"✅ اتصال به دیتابیس دائمی (Supabase) برقرار است! تعداد کاربران: {len(test)}")
     except Exception as e:
-        print(f"❌ خطا در اتصال به دیتابیس دائمی: {e}")
+        logger.error(f"❌ خطا در اتصال به دیتابیس دائمی: {e}")
         return
 
     try:
         channels = cache.get_forced_channels()
-        print(f"✅ اتصال به دیتابیس موقت (SQLite) برقرار است! تعداد چنل‌ها: {len(channels)}")
+        logger.info(f"✅ اتصال به دیتابیس موقت (SQLite) برقرار است! تعداد چنل‌ها: {len(channels)}")
     except Exception as e:
-        print(f"❌ خطا در اتصال به دیتابیس موقت: {e}")
+        logger.error(f"❌ خطا در اتصال به دیتابیس موقت: {e}")
 
     if not config.BOT_TOKEN:
-        print("⚠️ BOT_TOKEN تنظیم نشده — ربات مدیریت غیرفعال است")
+        logger.warning("⚠️ BOT_TOKEN تنظیم نشده — ربات مدیریت غیرفعال است")
         return
 
     _bot = telebot.TeleBot(config.BOT_TOKEN, parse_mode="HTML", threaded=False)
@@ -94,9 +99,9 @@ def start_token_bot():
     try:
         me = _bot.get_me()
         BOT_USERNAME = me.username
-        print(f"🤖 ربات مدیریت: @{BOT_USERNAME}")
+        logger.info(f"🤖 ربات مدیریت: @{BOT_USERNAME}")
     except Exception as e:
-        print(f"❌ خطا در اتصال ربات مدیریت: {e}")
+        logger.error(f"❌ خطا در اتصال ربات مدیریت: {e}")
         _bot = None
         return
 
@@ -233,7 +238,7 @@ def start_token_bot():
     def cmd_start(message):
         try:
             tg_id = message.from_user.id
-            print(f"📩 دستور start از کاربر {tg_id} دریافت شد")
+            logger.info(f"📩 دستور start از کاربر {tg_id} دریافت شد")
             
             parts = message.text.strip().split()
             ref_code = parts[1] if len(parts) > 1 else None
@@ -256,11 +261,11 @@ def start_token_bot():
                 return
 
             account = get_user_account(tg_id)
-            print(f"👤 حساب کاربری پیدا شده: {account}")
+            logger.info(f"👤 حساب کاربری پیدا شده: {account}")
             site_url = getattr(config, "SITE_URL", "")
 
             if not account:
-                print(f"❌ کاربر {tg_id} در دیتابیس دائمی پیدا نشد")
+                logger.warning(f"❌ کاربر {tg_id} در دیتابیس دائمی پیدا نشد")
                 markup = types.InlineKeyboardMarkup()
                 if site_url:
                     markup.add(types.InlineKeyboardButton("🌐 ثبت‌نام در پنل", url=site_url))
@@ -275,7 +280,7 @@ def start_token_bot():
                 return
 
             logged_in = db.get_setting(account["id"], "logged_in") == "1"
-            print(f"📊 وضعیت لاگین کاربر {tg_id}: {logged_in}")
+            logger.info(f"📊 وضعیت لاگین کاربر {tg_id}: {logged_in}")
             
             if not logged_in:
                 markup = types.InlineKeyboardMarkup()
@@ -322,7 +327,7 @@ def start_token_bot():
                 _bot.send_message(message.chat.id, sponsors_text)
         
         except Exception as e:
-            print(f"❌ خطا در cmd_start: {e}")
+            logger.error(f"❌ خطا در cmd_start: {e}")
             try:
                 _bot.reply_to(message, f"⚠️ خطا رخ داد: {str(e)}\n\nلطفاً دوباره /start بزنید.")
             except:
@@ -347,7 +352,7 @@ def start_token_bot():
                     show_alert=True
                 )
         except Exception as e:
-            print(f"❌ خطا در callback_check_join: {e}")
+            logger.error(f"❌ خطا در callback_check_join: {e}")
 
     # ─── دکمه به‌روزرسانی منو ──────────────────────────────────────────────
     @_bot.message_handler(func=lambda m: m.text == "🔄 به‌روزرسانی منو")
@@ -395,7 +400,7 @@ def start_token_bot():
                 reply_markup=markup
             )
         except Exception as e:
-            print(f"❌ خطا در cmd_refresh_menu: {e}")
+            logger.error(f"❌ خطا در cmd_refresh_menu: {e}")
             _bot.reply_to(message, f"⚠️ خطا: {e}")
 
     # ─── دکمه‌های اصلی ────────────────────────────────────────────────────
@@ -422,7 +427,7 @@ def start_token_bot():
                 reply_markup=user_keyboard() if message.from_user.id != config.OWNER_TG_ID else owner_keyboard()
             )
         except Exception as e:
-            print(f"❌ خطا در cmd_balance: {e}")
+            logger.error(f"❌ خطا در cmd_balance: {e}")
 
     @_bot.message_handler(func=lambda m: m.text == "🎁 هدیه روزانه")
     def cmd_daily(message):
@@ -442,7 +447,7 @@ def start_token_bot():
                 _bot.reply_to(message, msg, 
                             reply_markup=user_keyboard() if message.from_user.id != config.OWNER_TG_ID else owner_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_daily: {e}")
+            logger.error(f"❌ خطا در cmd_daily: {e}")
 
     @_bot.message_handler(func=lambda m: m.text == "🔗 رفرال")
     def cmd_referral(message):
@@ -466,7 +471,7 @@ def start_token_bot():
                 reply_markup=user_keyboard() if message.from_user.id != config.OWNER_TG_ID else owner_keyboard()
             )
         except Exception as e:
-            print(f"❌ خطا در cmd_referral: {e}")
+            logger.error(f"❌ خطا در cmd_referral: {e}")
 
     @_bot.message_handler(func=lambda m: m.text == "🛒 خرید الماس")
     def cmd_buy(message):
@@ -491,7 +496,7 @@ def start_token_bot():
                 reply_markup=markup
             )
         except Exception as e:
-            print(f"❌ خطا در cmd_buy: {e}")
+            logger.error(f"❌ خطا در cmd_buy: {e}")
 
     @_bot.message_handler(func=lambda m: m.text == "👤 پروفایل من")
     def cmd_profile(message):
@@ -515,7 +520,7 @@ def start_token_bot():
             _bot.reply_to(message, text, 
                          reply_markup=user_keyboard() if message.from_user.id != config.OWNER_TG_ID else owner_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_profile: {e}")
+            logger.error(f"❌ خطا در cmd_profile: {e}")
 
     @_bot.message_handler(func=lambda m: m.text == "📊 وضعیت سلف")
     def cmd_status(message):
@@ -553,7 +558,7 @@ def start_token_bot():
             _bot.reply_to(message, "\n".join(lines),
                          reply_markup=user_keyboard() if message.from_user.id != config.OWNER_TG_ID else owner_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_status: {e}")
+            logger.error(f"❌ خطا در cmd_status: {e}")
 
     @_bot.message_handler(func=lambda m: m.text == "📖 راهنما")
     def cmd_help(message):
@@ -603,7 +608,7 @@ def start_token_bot():
             _bot.reply_to(message, help_text,
                          reply_markup=user_keyboard() if message.from_user.id != config.OWNER_TG_ID else owner_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_help: {e}")
+            logger.error(f"❌ خطا در cmd_help: {e}")
 
     # ─── تنظیمات سلف ────────────────────────────────────────────────────────
     @_bot.message_handler(func=lambda m: m.text == "⚙️ تنظیمات سلف")
@@ -632,7 +637,7 @@ def start_token_bot():
             
             _bot.reply_to(message, text, reply_markup=settings_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_settings: {e}")
+            logger.error(f"❌ خطا در cmd_settings: {e}")
 
     # ─── دکمه‌های تنظیمات ──────────────────────────────────────────────────
     @_bot.message_handler(func=lambda m: m.text == "🟢 سلف روشن")
@@ -662,7 +667,7 @@ def start_token_bot():
                     f"❌ الماس کافی ندارید!\n💎 موجودی: {balance}\n⚡ نیاز: {config.TOKENS_PER_SESSION} الماس",
                     reply_markup=settings_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_start_bot: {e}")
+            logger.error(f"❌ خطا در cmd_start_bot: {e}")
             _bot.reply_to(message, f"⚠️ خطا: {e}", reply_markup=settings_keyboard())
 
     @_bot.message_handler(func=lambda m: m.text == "🔴 سلف خاموش")
@@ -678,7 +683,7 @@ def start_token_bot():
             db.set_setting(account["id"], "self_bot_active", "0")
             _bot.reply_to(message, "❌ سلف‌بات خاموش شد.", reply_markup=settings_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_stop_bot: {e}")
+            logger.error(f"❌ خطا در cmd_stop_bot: {e}")
             _bot.reply_to(message, f"⚠️ خطا: {e}", reply_markup=settings_keyboard())
 
     @_bot.message_handler(func=lambda m: m.text == "🤖 منشی")
@@ -703,7 +708,7 @@ def start_token_bot():
                 f"💡 هر کاربر فقط هر 24 ساعت یک بار پاسخ می‌گیرد.",
                 reply_markup=markup)
         except Exception as e:
-            print(f"❌ خطا در cmd_secretary_menu: {e}")
+            logger.error(f"❌ خطا در cmd_secretary_menu: {e}")
 
     @_bot.message_handler(func=lambda m: m.text.startswith("منشی "))
     def cmd_toggle_secretary(message):
@@ -723,7 +728,7 @@ def start_token_bot():
                 f"🤖 منشی {'روشن' if new_status == '1' else 'خاموش'} شد!",
                 reply_markup=settings_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_toggle_secretary: {e}")
+            logger.error(f"❌ خطا در cmd_toggle_secretary: {e}")
 
     @_bot.message_handler(func=lambda m: m.text == "✏️ تغییر پیام منشی")
     def cmd_change_secretary_msg(message):
@@ -740,7 +745,7 @@ def start_token_bot():
             
             _bot.register_next_step_handler(msg, process_secretary_msg, account["id"])
         except Exception as e:
-            print(f"❌ خطا در cmd_change_secretary_msg: {e}")
+            logger.error(f"❌ خطا در cmd_change_secretary_msg: {e}")
 
     def process_secretary_msg(message, owner_id):
         try:
@@ -752,7 +757,7 @@ def start_token_bot():
             _user_settings_cache.pop(f"{owner_id}:secretary_message", None)
             _bot.reply_to(message, "✅ پیام منشی ذخیره شد!", reply_markup=settings_keyboard())
         except Exception as e:
-            print(f"❌ خطا در process_secretary_msg: {e}")
+            logger.error(f"❌ خطا در process_secretary_msg: {e}")
 
     # ─── امنیت ──────────────────────────────────────────────────────────────
     @_bot.message_handler(func=lambda m: m.text == "🛡️ امنیت")
@@ -773,7 +778,7 @@ def start_token_bot():
             
             _bot.reply_to(message, text, reply_markup=security_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_security_menu: {e}")
+            logger.error(f"❌ خطا در cmd_security_menu: {e}")
 
     # ─── دکمه‌های امنیت ────────────────────────────────────────────────────
     @_bot.message_handler(func=lambda m: m.text.startswith("🛡️ ضد حذف"))
@@ -793,7 +798,7 @@ def start_token_bot():
                 f"🛡️ ضد حذف {'روشن' if new_status == '1' else 'خاموش'} شد!",
                 reply_markup=security_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_toggle_anti_delete: {e}")
+            logger.error(f"❌ خطا در cmd_toggle_anti_delete: {e}")
 
     @_bot.message_handler(func=lambda m: m.text.startswith("🔗 ضد لینک"))
     def cmd_toggle_anti_link(message):
@@ -812,7 +817,7 @@ def start_token_bot():
                 f"🔗 ضد لینک {'روشن' if new_status == '1' else 'خاموش'} شد!",
                 reply_markup=security_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_toggle_anti_link: {e}")
+            logger.error(f"❌ خطا در cmd_toggle_anti_link: {e}")
 
     @_bot.message_handler(func=lambda m: m.text.startswith("🔒 قفل پیوی"))
     def cmd_toggle_private_lock(message):
@@ -831,7 +836,7 @@ def start_token_bot():
                 f"🔒 قفل پیوی {'روشن' if new_status == '1' else 'خاموش'} شد!",
                 reply_markup=security_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_toggle_private_lock: {e}")
+            logger.error(f"❌ خطا در cmd_toggle_private_lock: {e}")
 
     @_bot.message_handler(func=lambda m: m.text.startswith("⚔️ پاسخ دشمن"))
     def cmd_toggle_enemy_reply(message):
@@ -850,7 +855,7 @@ def start_token_bot():
                 f"⚔️ پاسخ دشمن {'روشن' if new_status == '1' else 'خاموش'} شد!",
                 reply_markup=security_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_toggle_enemy_reply: {e}")
+            logger.error(f"❌ خطا در cmd_toggle_enemy_reply: {e}")
 
     # ─── اتوماسیون ──────────────────────────────────────────────────────────
     @_bot.message_handler(func=lambda m: m.text == "⚡ اتوماسیون")
@@ -872,7 +877,7 @@ def start_token_bot():
             
             _bot.reply_to(message, text, reply_markup=automation_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_automation_menu: {e}")
+            logger.error(f"❌ خطا در cmd_automation_menu: {e}")
 
     # ─── دکمه‌های اتوماسیون ────────────────────────────────────────────────
     @_bot.message_handler(func=lambda m: m.text.startswith("👁️ سین خودکار"))
@@ -892,7 +897,7 @@ def start_token_bot():
                 f"👁️ سین خودکار {'روشن' if new_status == '1' else 'خاموش'} شد!",
                 reply_markup=automation_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_toggle_auto_seen: {e}")
+            logger.error(f"❌ خطا در cmd_toggle_auto_seen: {e}")
 
     @_bot.message_handler(func=lambda m: m.text.startswith("❤️ ری‌اکشن"))
     def cmd_toggle_auto_reaction(message):
@@ -911,7 +916,7 @@ def start_token_bot():
                 f"❤️ ری‌اکشن خودکار {'روشن' if new_status == '1' else 'خاموش'} شد!",
                 reply_markup=automation_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_toggle_auto_reaction: {e}")
+            logger.error(f"❌ خطا در cmd_toggle_auto_reaction: {e}")
 
     @_bot.message_handler(func=lambda m: m.text.startswith("💾 ذخیره مدیا"))
     def cmd_toggle_auto_save(message):
@@ -930,7 +935,7 @@ def start_token_bot():
                 f"💾 ذخیره مدیا {'روشن' if new_status == '1' else 'خاموش'} شد!",
                 reply_markup=automation_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_toggle_auto_save: {e}")
+            logger.error(f"❌ خطا در cmd_toggle_auto_save: {e}")
 
     @_bot.message_handler(func=lambda m: m.text.startswith("⏰ ساعت نام/بیو"))
     def cmd_clock_menu(message):
@@ -954,7 +959,7 @@ def start_token_bot():
                 f"🔤 فونت فعلی: {settings.get('selected_font', '0')}",
                 reply_markup=markup)
         except Exception as e:
-            print(f"❌ خطا در cmd_clock_menu: {e}")
+            logger.error(f"❌ خطا در cmd_clock_menu: {e}")
 
     @_bot.message_handler(func=lambda m: m.text.startswith("ساعت نام "))
     def cmd_toggle_clock_name(message):
@@ -973,7 +978,7 @@ def start_token_bot():
                 f"⏰ ساعت نام {'روشن' if new_status == '1' else 'خاموش'} شد!",
                 reply_markup=settings_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_toggle_clock_name: {e}")
+            logger.error(f"❌ خطا در cmd_toggle_clock_name: {e}")
 
     @_bot.message_handler(func=lambda m: m.text.startswith("ساعت بیو "))
     def cmd_toggle_clock_bio(message):
@@ -992,7 +997,7 @@ def start_token_bot():
                 f"⏰ ساعت بیو {'روشن' if new_status == '1' else 'خاموش'} شد!",
                 reply_markup=settings_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_toggle_clock_bio: {e}")
+            logger.error(f"❌ خطا در cmd_toggle_clock_bio: {e}")
 
     # ─── فونت ────────────────────────────────────────────────────────────────
     @_bot.message_handler(func=lambda m: m.text == "🔤 فونت")
@@ -1011,7 +1016,7 @@ def start_token_bot():
             
             _bot.reply_to(message, text, reply_markup=font_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_font_menu: {e}")
+            logger.error(f"❌ خطا در cmd_font_menu: {e}")
 
     @_bot.message_handler(func=lambda m: m.text.startswith("فونت ") and len(m.text) <= 7)
     def cmd_set_font(message):
@@ -1029,7 +1034,7 @@ def start_token_bot():
             else:
                 _bot.reply_to(message, "❌ شماره فونت باید بین ۰ تا ۸ باشد.", reply_markup=font_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_set_font: {e}")
+            logger.error(f"❌ خطا در cmd_set_font: {e}")
 
     @_bot.message_handler(func=lambda m: m.text == "📝 لیست فونت")
     def cmd_list_fonts(message):
@@ -1067,7 +1072,7 @@ def start_token_bot():
             
             _bot.reply_to(message, "\n".join(lines), reply_markup=font_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_list_fonts: {e}")
+            logger.error(f"❌ خطا در cmd_list_fonts: {e}")
 
     # ─── لیست‌ها ─────────────────────────────────────────────────────────────
     @_bot.message_handler(func=lambda m: m.text == "📋 لیست‌ها")
@@ -1087,7 +1092,7 @@ def start_token_bot():
             
             _bot.reply_to(message, text, reply_markup=lists_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_lists_menu: {e}")
+            logger.error(f"❌ خطا در cmd_lists_menu: {e}")
 
     @_bot.message_handler(func=lambda m: m.text == "👤 مدیریت دشمن")
     def cmd_enemy_menu(message):
@@ -1111,7 +1116,7 @@ def start_token_bot():
             
             _bot.reply_to(message, text, reply_markup=enemy_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_enemy_menu: {e}")
+            logger.error(f"❌ خطا در cmd_enemy_menu: {e}")
 
     @_bot.message_handler(func=lambda m: m.text == "💚 مدیریت دوست")
     def cmd_friend_menu(message):
@@ -1135,7 +1140,7 @@ def start_token_bot():
             
             _bot.reply_to(message, text, reply_markup=friend_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_friend_menu: {e}")
+            logger.error(f"❌ خطا در cmd_friend_menu: {e}")
 
     # ─── دکمه‌های دشمن ──────────────────────────────────────────────────────
     @_bot.message_handler(func=lambda m: m.text == "➕ افزودن دشمن")
@@ -1153,7 +1158,7 @@ def start_token_bot():
             
             _bot.register_next_step_handler(msg, process_add_enemy, account["id"])
         except Exception as e:
-            print(f"❌ خطا در cmd_add_enemy_prompt: {e}")
+            logger.error(f"❌ خطا در cmd_add_enemy_prompt: {e}")
 
     def process_add_enemy(message, owner_id):
         try:
@@ -1181,7 +1186,7 @@ def start_token_bot():
                 _bot.reply_to(message, "❌ لطفاً یک آیدی عددی معتبر وارد کنید یا روی پیام ریپلای کنید.", 
                             reply_markup=enemy_keyboard())
         except Exception as e:
-            print(f"❌ خطا در process_add_enemy: {e}")
+            logger.error(f"❌ خطا در process_add_enemy: {e}")
             _bot.reply_to(message, f"⚠️ خطا: {e}", reply_markup=enemy_keyboard())
 
     @_bot.message_handler(func=lambda m: m.text == "❌ حذف دشمن")
@@ -1199,7 +1204,7 @@ def start_token_bot():
             
             _bot.register_next_step_handler(msg, process_remove_enemy, account["id"])
         except Exception as e:
-            print(f"❌ خطا در cmd_remove_enemy_prompt: {e}")
+            logger.error(f"❌ خطا در cmd_remove_enemy_prompt: {e}")
 
     def process_remove_enemy(message, owner_id):
         try:
@@ -1231,7 +1236,7 @@ def start_token_bot():
                 _bot.reply_to(message, "❌ لطفاً یک آیدی عددی معتبر وارد کنید یا روی پیام ریپلای کنید.", 
                             reply_markup=enemy_keyboard())
         except Exception as e:
-            print(f"❌ خطا در process_remove_enemy: {e}")
+            logger.error(f"❌ خطا در process_remove_enemy: {e}")
             _bot.reply_to(message, f"⚠️ خطا: {e}", reply_markup=enemy_keyboard())
 
     @_bot.message_handler(func=lambda m: m.text == "📋 نمایش دشمن‌ها")
@@ -1255,7 +1260,7 @@ def start_token_bot():
             
             _bot.reply_to(message, "\n".join(lines), reply_markup=enemy_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_show_enemies: {e}")
+            logger.error(f"❌ خطا در cmd_show_enemies: {e}")
 
     @_bot.message_handler(func=lambda m: m.text == "🗑️ پاک کردن دشمن‌ها")
     def cmd_clear_enemies(message):
@@ -1268,7 +1273,7 @@ def start_token_bot():
             db.clear_enemies(account["id"])
             _bot.reply_to(message, "🗑️ لیست دشمن پاک شد!", reply_markup=enemy_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_clear_enemies: {e}")
+            logger.error(f"❌ خطا در cmd_clear_enemies: {e}")
 
     # ─── دکمه‌های دوست ──────────────────────────────────────────────────────
     @_bot.message_handler(func=lambda m: m.text == "➕ افزودن دوست")
@@ -1286,7 +1291,7 @@ def start_token_bot():
             
             _bot.register_next_step_handler(msg, process_add_friend, account["id"])
         except Exception as e:
-            print(f"❌ خطا در cmd_add_friend_prompt: {e}")
+            logger.error(f"❌ خطا در cmd_add_friend_prompt: {e}")
 
     def process_add_friend(message, owner_id):
         try:
@@ -1314,7 +1319,7 @@ def start_token_bot():
                 _bot.reply_to(message, "❌ لطفاً یک آیدی عددی معتبر وارد کنید یا روی پیام ریپلای کنید.", 
                             reply_markup=friend_keyboard())
         except Exception as e:
-            print(f"❌ خطا در process_add_friend: {e}")
+            logger.error(f"❌ خطا در process_add_friend: {e}")
             _bot.reply_to(message, f"⚠️ خطا: {e}", reply_markup=friend_keyboard())
 
     @_bot.message_handler(func=lambda m: m.text == "❌ حذف دوست")
@@ -1332,7 +1337,7 @@ def start_token_bot():
             
             _bot.register_next_step_handler(msg, process_remove_friend, account["id"])
         except Exception as e:
-            print(f"❌ خطا در cmd_remove_friend_prompt: {e}")
+            logger.error(f"❌ خطا در cmd_remove_friend_prompt: {e}")
 
     def process_remove_friend(message, owner_id):
         try:
@@ -1364,7 +1369,7 @@ def start_token_bot():
                 _bot.reply_to(message, "❌ لطفاً یک آیدی عددی معتبر وارد کنید یا روی پیام ریپلای کنید.", 
                             reply_markup=friend_keyboard())
         except Exception as e:
-            print(f"❌ خطا در process_remove_friend: {e}")
+            logger.error(f"❌ خطا در process_remove_friend: {e}")
             _bot.reply_to(message, f"⚠️ خطا: {e}", reply_markup=friend_keyboard())
 
     @_bot.message_handler(func=lambda m: m.text == "📋 نمایش دوست‌ها")
@@ -1388,7 +1393,7 @@ def start_token_bot():
             
             _bot.reply_to(message, "\n".join(lines), reply_markup=friend_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_show_friends: {e}")
+            logger.error(f"❌ خطا در cmd_show_friends: {e}")
 
     @_bot.message_handler(func=lambda m: m.text == "🗑️ پاک کردن دوست‌ها")
     def cmd_clear_friends(message):
@@ -1401,7 +1406,7 @@ def start_token_bot():
             db.clear_friends(account["id"])
             _bot.reply_to(message, "🗑️ لیست دوست پاک شد!", reply_markup=friend_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_clear_friends: {e}")
+            logger.error(f"❌ خطا در cmd_clear_friends: {e}")
 
     # ─── دکمه بازگشت ──────────────────────────────────────────────────────
     @_bot.message_handler(func=lambda m: m.text == "🔙 بازگشت")
@@ -1415,7 +1420,7 @@ def start_token_bot():
             _bot.reply_to(message, "🔙 بازگشت به منوی اصلی.", 
                          reply_markup=owner_keyboard() if is_owner else user_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_back: {e}")
+            logger.error(f"❌ خطا در cmd_back: {e}")
 
     # ─── ════════════════════════════════════════════════════════════════ ───
     # ─── 🎯 چالش‌ها ─────────────────────────────────────────────────────── ───
@@ -1436,7 +1441,7 @@ def start_token_bot():
                 reply_markup=challenges_keyboard()
             )
         except Exception as e:
-            print(f"❌ cmd_challenges error: {e}")
+            logger.error(f"❌ cmd_challenges error: {e}")
 
     # ─── چالش ریاضی ──────────────────────────────────────────────────────────
     @_bot.message_handler(func=lambda m: m.text == "🧮 چالش ریاضی")
@@ -1460,7 +1465,7 @@ def start_token_bot():
                 reply_markup=challenges_keyboard()
             )
         except Exception as e:
-            print(f"❌ cmd_math_challenge error: {e}")
+            logger.error(f"❌ cmd_math_challenge error: {e}")
 
     # ─── پیش‌بینی جام جهانی ──────────────────────────────────────────────────
     @_bot.message_handler(func=lambda m: m.text == "⚽ پیش‌بینی جام جهانی")
@@ -1480,7 +1485,7 @@ def start_token_bot():
             )
             _bot.register_next_step_handler(msg, process_worldcup_team1)
         except Exception as e:
-            print(f"❌ cmd_worldcup error: {e}")
+            logger.error(f"❌ cmd_worldcup error: {e}")
 
     def process_worldcup_team1(message):
         try:
@@ -1499,7 +1504,7 @@ def start_token_bot():
             )
             _bot.register_next_step_handler(msg, process_worldcup_team2, team1)
         except Exception as e:
-            print(f"❌ process_worldcup_team1 error: {e}")
+            logger.error(f"❌ process_worldcup_team1 error: {e}")
 
     def process_worldcup_team2(message, team1):
         try:
@@ -1519,7 +1524,7 @@ def start_token_bot():
             )
             _bot.register_next_step_handler(msg, process_worldcup_time, team1, team2)
         except Exception as e:
-            print(f"❌ process_worldcup_team2 error: {e}")
+            logger.error(f"❌ process_worldcup_team2 error: {e}")
 
     def process_worldcup_time(message, team1, team2):
         try:
@@ -1542,23 +1547,24 @@ def start_token_bot():
             )
             _bot.register_next_step_handler(msg, process_worldcup_photo, team1, team2, match_time)
         except Exception as e:
-            print(f"❌ process_worldcup_time error: {e}")
+            logger.error(f"❌ process_worldcup_time error: {e}")
 
     def process_worldcup_photo(message, team1, team2, match_time):
         try:
             photo_file_id = None
             
             if message.text == "⏭ ردی":
-                pass
+                logger.info("⏭ بدون عکس")
             elif message.photo:
                 photo_file_id = message.photo[-1].file_id
-                print(f"📸 عکس دریافت شد: {photo_file_id}")
+                logger.info(f"📸 عکس دریافت شد: {photo_file_id}")
             else:
                 _bot.reply_to(message, "❌ لطفاً یک عکس ارسال کنید یا روی «ردی» کلیک کنید.")
                 return
             
             # ایجاد چالش در دیتابیس
             bet_id = db.create_worldcup_bet(1, team1, team2, match_time, photo_file_id)
+            logger.info(f"✅ چالش با ID {bet_id} در دیتابیس ثبت شد")
             
             # ساخت دکمه‌های شرط‌بندی
             markup = types.InlineKeyboardMarkup(row_width=2)
@@ -1576,18 +1582,43 @@ def start_token_bot():
                 f"🏆 برنده تمام الماس‌ها را دریافت می‌کند!"
             )
             
-            # ارسال به گروه
-            target_chat = -1002107981593  # @Gp_SelfNexo
+            # ✅ ارسال به گروه با مدیریت خطا
+            target_chat = "@Gp_SelfNexo"  # استفاده از یوزرنیم به جای آیدی
             
-            if photo_file_id:
-                sent = _bot.send_photo(
-                    target_chat, 
-                    photo_file_id,
-                    caption=caption, 
-                    reply_markup=markup
-                )
-            else:
-                sent = _bot.send_message(target_chat, caption, reply_markup=markup)
+            try:
+                logger.info(f"📢 ارسال به گروه {target_chat}")
+                
+                if photo_file_id:
+                    sent = _bot.send_photo(
+                        target_chat, 
+                        photo_file_id,
+                        caption=caption, 
+                        reply_markup=markup
+                    )
+                else:
+                    sent = _bot.send_message(target_chat, caption, reply_markup=markup)
+                
+                logger.info(f"✅ پیام با موفقیت ارسال شد. Message ID: {sent.message_id if sent else 'N/A'}")
+                
+            except Exception as e:
+                error_msg = str(e)
+                logger.error(f"❌ خطا در ارسال به گروه: {error_msg}")
+                
+                # اگر گروه پیدا نشد، پیام خطا بده
+                if "chat not found" in error_msg.lower() or "bot" in error_msg.lower():
+                    _bot.reply_to(
+                        message, 
+                        f"❌ گروه @Gp_SelfNexo پیدا نشد!\n\n"
+                        f"لطفاً مراحل زیر را انجام دهید:\n"
+                        f"1️⃣ ربات @{BOT_USERNAME} را به گروه اضافه کنید\n"
+                        f"2️⃣ به ربات اجازه ارسال پیام بدهید\n"
+                        f"3️⃣ دوباره امتحان کنید\n\n"
+                        f"خطا: {error_msg}", 
+                        reply_markup=owner_keyboard()
+                    )
+                else:
+                    _bot.reply_to(message, f"❌ خطا در ارسال: {error_msg}", reply_markup=owner_keyboard())
+                return
             
             _waiting_for_worldcup.pop(message.chat.id, None)
             
@@ -1596,12 +1627,12 @@ def start_token_bot():
                 f"✅ **چالش ایجاد شد!**\n\n"
                 f"⚽ {team1} vs {team2}\n"
                 f"🕐 {match_time}\n"
-                f"📢 در گروه ارسال شد.",
+                f"📢 در گروه @Gp_SelfNexo ارسال شد.",
                 reply_markup=owner_keyboard()
             )
         except Exception as e:
-            print(f"❌ process_worldcup_photo error: {e}")
-            _bot.reply_to(message, f"❌ خطا: {e}", reply_markup=owner_keyboard())
+            logger.error(f"❌ process_worldcup_photo error: {e}")
+            _bot.reply_to(message, f"❌ خطا: {str(e)}", reply_markup=owner_keyboard())
 
     # ─── پردازش دکمه‌های شرط‌بندی ──────────────────────────────────────────
     @_bot.callback_query_handler(func=lambda call: call.data.startswith('bet_'))
@@ -1639,8 +1670,8 @@ def start_token_bot():
             _bot.answer_callback_query(call.id, "✅ انتخاب ثبت شد!")
             
         except Exception as e:
-            print(f"❌ callback_bet error: {e}")
-            _bot.answer_callback_query(call.id, f"❌ خطا: {e}", show_alert=True)
+            logger.error(f"❌ callback_bet error: {e}")
+            _bot.answer_callback_query(call.id, f"❌ خطا: {str(e)}", show_alert=True)
 
     def process_bet_amount(message, bet_id, user_tg_id, selected_team):
         try:
@@ -1685,8 +1716,8 @@ def start_token_bot():
             )
             
         except Exception as e:
-            print(f"❌ process_bet_amount error: {e}")
-            _bot.reply_to(message, f"❌ خطا: {e}")
+            logger.error(f"❌ process_bet_amount error: {e}")
+            _bot.reply_to(message, f"❌ خطا: {str(e)}")
 
     # ─── اعلام برنده ──────────────────────────────────────────────────────────
     @_bot.message_handler(func=lambda m: m.text == "🏆 اعلام برنده")
@@ -1715,7 +1746,7 @@ def start_token_bot():
                 reply_markup=markup
             )
         except Exception as e:
-            print(f"❌ cmd_announce_winner error: {e}")
+            logger.error(f"❌ cmd_announce_winner error: {e}")
 
     @_bot.callback_query_handler(func=lambda call: call.data.startswith('winner_'))
     def callback_winner(call):
@@ -1753,23 +1784,26 @@ def start_token_bot():
             
             db.finish_worldcup_bet(bet['id'], winner)
             
-            target_chat = -1002107981593  # @Gp_SelfNexo
-            _bot.send_message(
-                target_chat,
-                f"🏆 **نتیجه مسابقه**\n\n"
-                f"⚽ برنده: **{winner}**\n"
-                f"💎 کل الماس‌ها: **{total_tokens}**\n"
-                f"👥 تعداد برندگان: **{len(winners)}** نفر\n"
-                f"🎁 هر برنده: **{winner_amount}** الماس\n\n"
-                f"🎉 به برندگان تبریک می‌گوییم!"
-            )
+            target_chat = "@Gp_SelfNexo"
+            try:
+                _bot.send_message(
+                    target_chat,
+                    f"🏆 **نتیجه مسابقه**\n\n"
+                    f"⚽ برنده: **{winner}**\n"
+                    f"💎 کل الماس‌ها: **{total_tokens}**\n"
+                    f"👥 تعداد برندگان: **{len(winners)}** نفر\n"
+                    f"🎁 هر برنده: **{winner_amount}** الماس\n\n"
+                    f"🎉 به برندگان تبریک می‌گوییم!"
+                )
+            except Exception as e:
+                logger.error(f"❌ خطا در ارسال نتیجه به گروه: {e}")
             
             _bot.answer_callback_query(call.id, f"✅ برنده {winner} اعلام شد!")
             _bot.reply_to(call.message, f"✅ برنده **{winner}** اعلام شد!", reply_markup=owner_keyboard())
             
         except Exception as e:
-            print(f"❌ callback_winner error: {e}")
-            _bot.answer_callback_query(call.id, f"❌ خطا: {e}", show_alert=True)
+            logger.error(f"❌ callback_winner error: {e}")
+            _bot.answer_callback_query(call.id, f"❌ خطا: {str(e)}", show_alert=True)
 
     # ─── پیام عمومی ──────────────────────────────────────────────────────────
     @_bot.message_handler(func=lambda m: m.text == "📢 پیام عمومی")
@@ -1787,7 +1821,7 @@ def start_token_bot():
             )
             _bot.register_next_step_handler(msg, process_broadcast)
         except Exception as e:
-            print(f"❌ cmd_broadcast error: {e}")
+            logger.error(f"❌ cmd_broadcast error: {e}")
 
     def process_broadcast(message):
         try:
@@ -1814,7 +1848,7 @@ def start_token_bot():
                         success_count += 1
                         time.sleep(0.05)
                     except Exception as e:
-                        print(f"❌ ارسال به {tg_id} ناموفق: {e}")
+                        logger.error(f"❌ ارسال به {tg_id} ناموفق: {e}")
             
             _bot.send_message(
                 message.chat.id,
@@ -1824,8 +1858,8 @@ def start_token_bot():
             )
             
         except Exception as e:
-            print(f"❌ process_broadcast error: {e}")
-            _bot.reply_to(message, f"❌ خطا: {e}", reply_markup=owner_keyboard())
+            logger.error(f"❌ process_broadcast error: {e}")
+            _bot.reply_to(message, f"❌ خطا: {str(e)}", reply_markup=owner_keyboard())
 
     # ─── دستورات مالک ──────────────────────────────────────────────────────
     @_bot.message_handler(func=lambda m: m.text == "📢 مدیریت چنل‌ها")
@@ -1846,7 +1880,7 @@ def start_token_bot():
             
             _bot.reply_to(message, text, reply_markup=markup)
         except Exception as e:
-            print(f"❌ خطا در cmd_admin_channels: {e}")
+            logger.error(f"❌ خطا در cmd_admin_channels: {e}")
 
     @_bot.message_handler(func=lambda m: m.text == "➕ افزودن چنل")
     def cmd_add_channel_prompt(message):
@@ -1860,7 +1894,7 @@ def start_token_bot():
             
             _bot.register_next_step_handler(msg, process_add_channel)
         except Exception as e:
-            print(f"❌ خطا در cmd_add_channel_prompt: {e}")
+            logger.error(f"❌ خطا در cmd_add_channel_prompt: {e}")
 
     def process_add_channel(message):
         try:
@@ -1876,7 +1910,7 @@ def start_token_bot():
                 _bot.reply_to(message, "❌ خطا یا چنل تکراری است.", 
                             reply_markup=owner_keyboard())
         except Exception as e:
-            print(f"❌ خطا در process_add_channel: {e}")
+            logger.error(f"❌ خطا در process_add_channel: {e}")
 
     @_bot.message_handler(func=lambda m: m.text == "❌ حذف چنل")
     def cmd_remove_channel_prompt(message):
@@ -1896,7 +1930,7 @@ def start_token_bot():
                 "✏️ <b>روی چنل مورد نظر برای حذف کلیک کنید:</b>",
                 reply_markup=markup)
         except Exception as e:
-            print(f"❌ خطا در cmd_remove_channel_prompt: {e}")
+            logger.error(f"❌ خطا در cmd_remove_channel_prompt: {e}")
 
     @_bot.message_handler(func=lambda m: m.text.startswith("🗑️ @"))
     def cmd_remove_channel(message):
@@ -1911,7 +1945,7 @@ def start_token_bot():
                 _bot.reply_to(message, f"❌ چنل {username} یافت نشد.", 
                             reply_markup=owner_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_remove_channel: {e}")
+            logger.error(f"❌ خطا در cmd_remove_channel: {e}")
 
     @_bot.message_handler(func=lambda m: m.text == "📋 نمایش چنل‌ها")
     def cmd_show_channels(message):
@@ -1930,7 +1964,7 @@ def start_token_bot():
             
             _bot.reply_to(message, text, reply_markup=owner_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_show_channels: {e}")
+            logger.error(f"❌ خطا در cmd_show_channels: {e}")
 
     @_bot.message_handler(func=lambda m: m.text == "👥 مدیریت کاربران")
     def cmd_admin_users(message):
@@ -1951,7 +1985,7 @@ def start_token_bot():
             
             _bot.reply_to(message, text, reply_markup=owner_users_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_admin_users: {e}")
+            logger.error(f"❌ خطا در cmd_admin_users: {e}")
 
     @_bot.message_handler(func=lambda m: m.text == "📋 لیست کاربران")
     def cmd_list_users(message):
@@ -1973,7 +2007,7 @@ def start_token_bot():
             
             _bot.reply_to(message, "\n".join(lines), reply_markup=owner_users_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_list_users: {e}")
+            logger.error(f"❌ خطا در cmd_list_users: {e}")
 
     @_bot.message_handler(func=lambda m: m.text == "🎁 هدیه به کاربر")
     def cmd_give_prompt(message):
@@ -1988,7 +2022,7 @@ def start_token_bot():
             
             _bot.register_next_step_handler(msg, process_give_tokens)
         except Exception as e:
-            print(f"❌ خطا در cmd_give_prompt: {e}")
+            logger.error(f"❌ خطا در cmd_give_prompt: {e}")
 
     def process_give_tokens(message):
         try:
@@ -2033,7 +2067,7 @@ def start_token_bot():
                 except:
                     pass
         except Exception as e:
-            print(f"❌ خطا در process_give_tokens: {e}")
+            logger.error(f"❌ خطا در process_give_tokens: {e}")
 
     # ─── پیام‌های ناشناخته ──────────────────────────────────────────────────
     @_bot.message_handler(func=lambda m: True)
@@ -2050,7 +2084,7 @@ def start_token_bot():
             _bot.reply_to(message, "📱 لطفاً از دکمه‌های زیر استفاده کنید:", 
                          reply_markup=owner_keyboard() if is_owner else user_keyboard())
         except Exception as e:
-            print(f"❌ خطا در cmd_unknown: {e}")
+            logger.error(f"❌ خطا در cmd_unknown: {e}")
 
     # ─── حلقه Polling ──────────────────────────────────────────────────────
     def _polling_loop():
@@ -2067,8 +2101,9 @@ def start_token_bot():
                     except:
                         pass
                 else:
+                    logger.error(f"❌ خطا در polling: {e}")
                     _t.sleep(5)
 
     t = threading.Thread(target=_polling_loop, daemon=True)
     t.start()
-    print(f"✅ ربات مدیریت @{BOT_USERNAME} استارت شد.")
+    logger.info(f"✅ ربات مدیریت @{BOT_USERNAME} استارت شد.")
