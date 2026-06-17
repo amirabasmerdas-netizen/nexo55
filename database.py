@@ -49,6 +49,12 @@ from database_supabase import (
     finish_worldcup_bet as supa_finish_worldcup_bet,
     get_challenge_settings as supa_get_challenge_settings,
     update_challenge_settings as supa_update_challenge_settings,
+    # شرط‌بندی دو نفره
+    create_bet_game as supa_create_bet_game,
+    join_bet_game as supa_join_bet_game,
+    get_active_bet_game as supa_get_active_bet_game,
+    finish_bet_game as supa_finish_bet_game,
+    get_bet_game as supa_get_bet_game,
     SETTING_DEFAULTS,
     _hash_pw,
 )
@@ -245,6 +251,22 @@ def get_challenge_settings(owner_id: int):
 def update_challenge_settings(owner_id: int, key: str, value):
     return supa_update_challenge_settings(owner_id, key, value)
 
+# ─── ✅ توابع شرط‌بندی دو نفره ──────────────────────────────────────────────────
+def create_bet_game(owner_id: int, chat_id: int, player1_id: int, bet_amount: int, message_id: int = None):
+    return supa_create_bet_game(owner_id, chat_id, player1_id, bet_amount, message_id)
+
+def join_bet_game(game_id: int, player2_id: int):
+    return supa_join_bet_game(game_id, player2_id)
+
+def get_active_bet_game(chat_id: int):
+    return supa_get_active_bet_game(chat_id)
+
+def finish_bet_game(game_id: int, winner_id: int):
+    return supa_finish_bet_game(game_id, winner_id)
+
+def get_bet_game(game_id: int):
+    return supa_get_bet_game(game_id)
+
 # ─── صادرات ────────────────────────────────────────────────────────────────────
 __all__ = [
     # حساب‌ها
@@ -285,4 +307,8 @@ __all__ = [
     'create_worldcup_bet', 'get_active_worldcup_bet', 'place_bet',
     'get_bet_users', 'finish_worldcup_bet',
     'get_challenge_settings', 'update_challenge_settings',
+    
+    # شرط‌بندی دو نفره
+    'create_bet_game', 'join_bet_game', 'get_active_bet_game',
+    'finish_bet_game', 'get_bet_game',
 ]
