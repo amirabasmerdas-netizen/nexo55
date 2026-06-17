@@ -38,6 +38,23 @@ _last_friend_reply = {}     # {sender_id: timestamp}
 SECRETARY_COOLDOWN = 86400  # 24 ساعت
 FRIEND_COOLDOWN = 3600      # 1 ساعت
 
+# ─── کش حافظه ──────────────────────────────────────────────────────────────────
+_user_cache = {}
+_user_cache_time = {}
+_CACHE_TTL = 60  # 60 ثانیه
+
+def get_cached_user(tg_id: int):
+    now = time.time()
+    if tg_id in _user_cache and (now - _user_cache_time.get(tg_id, 0) < _CACHE_TTL):
+        return _user_cache[tg_id]
+    account = db.get_account_by_tg_id(tg_id)
+    _user_cache[tg_id] = account
+    _user_cache_time[tg_id] = now
+    return account
+
+def clear_user_cache():
+    _user_cache.clear()
+    _user_cache_time.clear()
 
 def _convert_font(text, chars):
     result = []
@@ -149,7 +166,6 @@ class BotManager:
                     await asyncio.sleep(10)
                     continue
 
-                # ✅ ایجاد کلاینت با تنظیمات timeout بیشتر
                 cl = TelegramClient(
                     StringSession(session_data),
                     config.API_ID,
@@ -161,7 +177,6 @@ class BotManager:
                 entry["client"] = cl
                 _register_handlers(cl, owner_id, entry)
 
-                # ✅ اتصال با تنظیمات بهتر
                 try:
                     await cl.connect()
                     if not cl.is_connected():
@@ -169,16 +184,14 @@ class BotManager:
                         await asyncio.sleep(5)
                         continue
                     
-                    # ✅ شروع با phone=None برای جلوگیری از درخواست ورودی
                     await cl.start(phone=lambda: None, bot_token=lambda: None)
                     
                 except Exception as e:
                     print(f"❌ [{owner_id}] خطا در اتصال: {e}")
-                    # اگر session خراب است، آن را پاک کن
                     if "invalid" in str(e).lower() or "auth" in str(e).lower():
                         db.set_setting(owner_id, "session_data", "")
                         db.set_setting(owner_id, "logged_in", "0")
-                        print(f"🔄 [{owner_id}] Session خراب است، پاک شد. لطفاً دوباره لاگین کنید.")
+                        print(f"🔄 [{owner_id}] Session خراب است، پاک شد.")
                     await asyncio.sleep(10)
                     continue
                     
@@ -192,7 +205,6 @@ class BotManager:
 
                 db.save_telegram_user_id(owner_id, me.id)
 
-                # تشخیص مالک
                 me_phone = (me.phone or "").lstrip("+")
                 owner_phone = getattr(config, "OWNER_PHONE", "").lstrip("+")
                 
@@ -211,7 +223,6 @@ class BotManager:
                         print(f"👑 [{owner_id}] مالک تشخیص داده شد - {entry['tokens_deducted']} الماس برگشت داده شد")
                     print(f"👑 [{owner_id}] مالک: @{me.username} (ID: {me.id}) — تایمر لغو — رایگان ♾️")
 
-                # استارت تسک‌های پس‌زمینه
                 clock_task = asyncio.ensure_future(_clock_loop(cl, owner_id))
                 sched_task = asyncio.ensure_future(_scheduler_loop(cl, owner_id))
                 
@@ -314,7 +325,6 @@ def _register_handlers(cl: TelegramClient, owner_id: int, entry: dict):
                 except Exception as e:
                     print(f"⚠️ خطا در ری‌اکشن گروه: {e}")
             
-            # ❌ پاسخ به دستور "موجودی" در گروه حذف شد - فقط ربات مدیریت پاسخ میدهد
             return
 
         if db.is_silent_chat(owner_id, chat_id) or db.is_silent_user(owner_id, sender_id):
@@ -422,7 +432,7 @@ def _register_handlers(cl: TelegramClient, owner_id: int, entry: dict):
                 if challenge and not challenge.get('solved') and replied.id == challenge['message_id']:
                     user_answer = text.strip()
                     if user_answer == challenge['correct_answer']:
-                        account = db.get_account_by_tg_id(sender_id)
+                        account = get_cached_user(sender_id)
                         if account:
                             db.add_tokens(account['id'], 1)
                             await event.reply(
@@ -880,7 +890,7 @@ async def _save_channel_media(cl, channel_input, limit, owner_id):
                             caption += f"\n📝 {msg.text[:100]}"
                         await cl.send_file(me.id, path, caption=caption)
                         saved += 1
-                        await asyncio.sleep(1.5)
+                        await asyncio.sleep(0.1)  # کاهش تاخیر
                 except FloodWaitError as e:
                     await asyncio.sleep(e.seconds + 2)
                 except Exception:
@@ -1064,13 +1074,11 @@ async def _math_challenge_loop(cl, owner_id):
     
     while True:
         try:
-            # بررسی فعال بودن چالش ریاضی
             settings = db.get_challenge_settings(owner_id)
             if not settings.get('math_challenge_active', False):
                 await asyncio.sleep(30)
                 continue
             
-            # تولید چالش جدید
             operations = ['+', '-', '×']
             op = random.choice(operations)
             
@@ -1084,13 +1092,12 @@ async def _math_challenge_loop(cl, owner_id):
                 b = random.randint(10, a - 1)
                 answer = str(a - b)
                 question = f"{a} - {b} = ?"
-            else:  # ×
+            else:
                 a = random.randint(2, 12)
                 b = random.randint(2, 12)
                 answer = str(a * b)
                 question = f"{a} × {b} = ?"
             
-            # ارسال به گروه
             msg = await cl.send_message(
                 CHAT_ID,
                 f"🧮 **چالش ریاضی!**\n\n"
@@ -1099,13 +1106,10 @@ async def _math_challenge_loop(cl, owner_id):
                 f"📝 پاسخ را به صورت عدد لاتین ریپلای کنید."
             )
             
-            # ذخیره در دیتابیس
             db.create_math_challenge(owner_id, question, answer, CHAT_ID, msg.id)
             
-            # منتظر ۲ ساعت
             await asyncio.sleep(7200)  # 2 ساعت
             
-            # چک کردن اینکه آیا حل شده یا نه
             challenge = db.get_math_challenge(owner_id)
             if challenge and not challenge.get('solved'):
                 await cl.send_message(
