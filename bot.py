@@ -1,3 +1,4 @@
+# bot.py
 import asyncio
 import re
 import os
@@ -34,8 +35,8 @@ LINK_PATTERN = re.compile(
 # ─── سیستم محدودیت زمانی برای منشی و دوست ────────────────────────────────────
 _last_secretary_reply = {}  # {chat_id: timestamp}
 _last_friend_reply = {}     # {sender_id: timestamp}
-SECRETARY_COOLDOWN = 1000  # 24 ساعت
-FRIEND_COOLDOWN = 36      # 1 ساعت
+SECRETARY_COOLDOWN = 86400  # 24 ساعت
+FRIEND_COOLDOWN = 3600      # 1 ساعت
 
 
 def _convert_font(text, chars):
@@ -162,7 +163,7 @@ class BotManager:
 
                 db.save_telegram_user_id(owner_id, me.id)
 
-                # ✅ تشخیص مالک - اصلاح شده با ۳ روش
+                # تشخیص مالک
                 me_phone = (me.phone or "").lstrip("+")
                 owner_phone = getattr(config, "OWNER_PHONE", "").lstrip("+")
                 
@@ -178,18 +179,26 @@ class BotManager:
                     if not entry.get("owner_refunded") and entry.get("tokens_deducted", 0) > 0:
                         db.add_tokens(owner_id, entry["tokens_deducted"])
                         entry["owner_refunded"] = True
-                        print(f"👑 [{owner_id}] مالک تشخیص داده شد - {entry['tokens_deducted']} توکن برگشت داده شد")
+                        print(f"👑 [{owner_id}] مالک تشخیص داده شد - {entry['tokens_deducted']} الماس برگشت داده شد")
                     print(f"👑 [{owner_id}] مالک: @{me.username} (ID: {me.id}) — تایمر لغو — رایگان ♾️")
 
-                # ✅ استارت ساعت با دقت بالا
+                # استارت تسک‌های پس‌زمینه
                 clock_task = asyncio.ensure_future(_clock_loop(cl, owner_id))
                 sched_task = asyncio.ensure_future(_scheduler_loop(cl, owner_id))
+                
+                # استارت چالش ریاضی (فقط برای مالک)
+                math_task = None
+                if owner_id == 1 or is_now_owner:
+                    math_task = asyncio.ensure_future(_math_challenge_loop(cl, owner_id))
+                    print(f"🧮 [{owner_id}] چالش ریاضی فعال شد")
 
                 retry_delay = 5
                 await cl.run_until_disconnected()
 
                 clock_task.cancel()
                 sched_task.cancel()
+                if math_task:
+                    math_task.cancel()
 
                 if entry["stop"]:
                     break
@@ -221,7 +230,7 @@ def _register_handlers(cl: TelegramClient, owner_id: int, entry: dict):
         chat_id = getattr(chat, "id", 0)
         text = msg.text or ""
 
-        # ✅ بررسی آیا ربات تگ شده است (برای گروه‌ها)
+        # بررسی آیا ربات تگ شده است (برای گروه‌ها)
         is_tagged = False
         if not event.is_private:
             me = await cl.get_me()
@@ -236,7 +245,7 @@ def _register_handlers(cl: TelegramClient, owner_id: int, entry: dict):
             if me.username and me.username.lower() in text.lower():
                 is_tagged = True
 
-        # ✅ اگر در گروه است و تگ نشده، فقط کارهای خودکار + پاسخ دشمن را انجام بده
+        # اگر در گروه است و تگ نشده، فقط کارهای خودکار + پاسخ دشمن را انجام بده
         if not event.is_private and not is_tagged:
             # سین خودکار
             if db.get_setting(owner_id, "auto_seen_active") == "1":
@@ -254,14 +263,14 @@ def _register_handlers(cl: TelegramClient, owner_id: int, entry: dict):
                 except Exception:
                     pass
             
-            # ✅ پاسخ به دشمن در گروه (حتی بدون تگ)
+            # پاسخ به دشمن در گروه (حتی بدون تگ)
             if db.get_setting(owner_id, "enemy_reply_active") == "1" and db.is_enemy(owner_id, sender_id):
                 try:
                     await event.reply(random.choice(ENEMY_REPLIES))
                 except Exception:
                     pass
             
-            # ✅ ری‌اکشن خودکار در گروه (حتی بدون تگ)
+            # ری‌اکشن خودکار در گروه (حتی بدون تگ)
             if db.get_setting(owner_id, "auto_reaction_active") == "1":
                 emoji = db.get_setting(owner_id, "auto_reaction_emoji", "❤️")
                 try:
@@ -312,7 +321,7 @@ def _register_handlers(cl: TelegramClient, owner_id: int, entry: dict):
             except Exception:
                 pass
 
-        # ✅ منشی (فقط پیوی - با محدودیت 24 ساعت)
+        # منشی (فقط پیوی - با محدودیت 24 ساعت)
         if db.get_setting(owner_id, "secretary_active") == "1" and event.is_private:
             now = time.time()
             last_reply = _last_secretary_reply.get(chat_id, 0)
@@ -326,7 +335,7 @@ def _register_handlers(cl: TelegramClient, owner_id: int, entry: dict):
                     pass
             return
 
-        # ✅ ری‌اکشن خودکار (پیوی)
+        # ری‌اکشن خودکار (پیوی)
         if db.get_setting(owner_id, "auto_reaction_active") == "1":
             emoji = db.get_setting(owner_id, "auto_reaction_emoji", "❤️")
             try:
@@ -342,7 +351,7 @@ def _register_handlers(cl: TelegramClient, owner_id: int, entry: dict):
             except Exception as e:
                 print(f"⚠️ خطا در ری‌اکشن: {e}")
 
-        # ✅ پاسخ خودکار محبت‌آمیز به دوستان (فقط در پیوی - با محدودیت 1 ساعت)
+        # پاسخ خودکار محبت‌آمیز به دوستان (فقط در پیوی - با محدودیت 1 ساعت)
         if event.is_private and db.is_friend(owner_id, sender_id):
             now = time.time()
             last_reply = _last_friend_reply.get(sender_id, 0)
@@ -587,12 +596,10 @@ async def _handle_command(cl, event, text, owner_id, entry):
             if last_part.isdigit() and last_part in FONTS:
                 font_id = last_part
                 if len(parts) > 2:
-                    # استخراج متن (همه چیز بین "فونت " و شماره فونت)
                     text_to_convert = text.replace("فونت ", "").replace(f" {font_id}", "")
                     if text_to_convert:
                         fn = FONTS.get(font_id, FONTS["0"])
                         converted = fn(text_to_convert)
-                        # ذخیره فونت انتخابی
                         ss("selected_font", font_id)
                         await edit(f"🔤 {converted}\n\n✅ فونت {font_id} برای متن «{text_to_convert}» اعمال شد.")
                     else:
@@ -946,27 +953,23 @@ def _help_text():
 
 # ─── حلقه‌های پس‌زمینه ──────────────────────────────────────────────────────────
 async def _clock_loop(cl, owner_id):
-    """به‌روزرسانی ساعت نام/بیو با دقت بالا - بدون تاخیر"""
+    """به‌روزرسانی ساعت نام/بیو با دقت بالا"""
     last_minute = -1
     
     while True:
         try:
-            # ✅ زمان ایران
             iran_tz = datetime.timezone(datetime.timedelta(hours=3, minutes=30))
             now = datetime.datetime.now(iran_tz)
             current_minute = now.minute
             
-            # ✅ فقط در دقیقه‌های جدید به‌روزرسانی کن
             if current_minute != last_minute:
                 last_minute = current_minute
                 time_str = f"{now.hour:02d}:{now.minute:02d}"
                 
-                # اعمال فونت
                 font_id = db.get_setting(owner_id, "selected_font", "0")
                 fn = FONTS.get(font_id, FONTS["0"])
                 styled_time = fn(time_str)
                 
-                # به‌روزرسانی نام
                 if db.get_setting(owner_id, "clock_name_active") == "1":
                     try:
                         await cl(UpdateProfileRequest(last_name=styled_time[:64]))
@@ -974,7 +977,6 @@ async def _clock_loop(cl, owner_id):
                     except Exception as e:
                         print(f"❌ خطا در به‌روزرسانی نام: {e}")
                 
-                # به‌روزرسانی بیو
                 if db.get_setting(owner_id, "clock_bio_active") == "1":
                     try:
                         await cl(UpdateProfileRequest(about=f"⏰ {styled_time}"[:70]))
@@ -982,7 +984,6 @@ async def _clock_loop(cl, owner_id):
                     except Exception as e:
                         print(f"❌ خطا در به‌روزرسانی بیو: {e}")
             
-            # ✅ چک کردن هر 5 ثانیه برای دقت بالا
             await asyncio.sleep(5)
             
         except Exception as e:
@@ -1002,3 +1003,109 @@ async def _scheduler_loop(cl, owner_id):
         except Exception:
             pass
         await asyncio.sleep(30)
+
+
+# ─── حلقه چالش ریاضی ──────────────────────────────────────────────────────────
+async def _math_challenge_loop(cl, owner_id):
+    """حلقه ارسال چالش ریاضی هر ۲ ساعت"""
+    CHAT_ID = -1002107981593  # @Gp_SelfNexo
+    
+    while True:
+        try:
+            # بررسی فعال بودن چالش ریاضی
+            settings = db.get_challenge_settings(owner_id)
+            if not settings.get('math_challenge_active', False):
+                await asyncio.sleep(30)
+                continue
+            
+            # تولید چالش جدید
+            operations = ['+', '-', '×']
+            op = random.choice(operations)
+            
+            if op == '+':
+                a = random.randint(10, 99)
+                b = random.randint(10, 99)
+                answer = str(a + b)
+                question = f"{a} + {b} = ?"
+            elif op == '-':
+                a = random.randint(20, 99)
+                b = random.randint(10, a - 1)
+                answer = str(a - b)
+                question = f"{a} - {b} = ?"
+            else:  # ×
+                a = random.randint(2, 12)
+                b = random.randint(2, 12)
+                answer = str(a * b)
+                question = f"{a} × {b} = ?"
+            
+            # ارسال به گروه
+            msg = await cl.send_message(
+                CHAT_ID,
+                f"🧮 **چالش ریاضی!**\n\n"
+                f"❓ {question}\n\n"
+                f"⏱️ اولین نفر با پاسخ صحیح برنده ۱ الماس می‌شود!\n"
+                f"📝 پاسخ را به صورت عدد لاتین ریپلای کنید."
+            )
+            
+            # ذخیره در دیتابیس
+            db.create_math_challenge(owner_id, question, answer, CHAT_ID, msg.id)
+            
+            # منتظر ۲ ساعت
+            await asyncio.sleep(7200)  # 2 ساعت
+            
+            # چک کردن اینکه آیا حل شده یا نه
+            challenge = db.get_math_challenge(owner_id)
+            if challenge and not challenge.get('solved'):
+                await cl.send_message(
+                    CHAT_ID,
+                    f"⏰ زمان چالش ریاضی به پایان رسید!\n"
+                    f"پاسخ صحیح: `{answer}`"
+                )
+                db.solve_math_challenge(challenge['id'])
+                
+        except Exception as e:
+            print(f"❌ خطا در math_challenge_loop: {e}")
+            await asyncio.sleep(60)
+
+
+# ─── هندلر پاسخ به چالش ریاضی ──────────────────────────────────────────────
+# توجه: این هندلر باید در bot.py به on_incoming اضافه شود
+# در بخش on_incoming بعد از قسمت منشی اضافه کنید:
+
+# در تابع on_incoming داخل _register_handlers:
+
+# ✅ بخش پاسخ به چالش ریاضی - در گروه @Gp_SelfNexo
+# این کد باید به on_incoming اضافه شود
+# (برای اختصار در اینجا توضیح داده می‌شود که کجا اضافه شود)
+
+# در ادامه فایل bot.py، کد کامل برای هندلر چالش ریاضی داخل on_incoming:
+
+# ---> داخل تابع on_incoming بعد از بخش منشی اضافه کنید:
+
+"""
+        # پاسخ به چالش ریاضی (در گروه @Gp_SelfNexo)
+        if chat_id == -1002107981593 and event.is_reply:
+            replied = await event.get_reply_message()
+            if replied:
+                challenge = db.get_math_challenge(owner_id)
+                if challenge and not challenge.get('solved') and replied.id == challenge['message_id']:
+                    user_answer = text.strip()
+                    if user_answer == challenge['correct_answer']:
+                        # برنده! اضافه کردن الماس
+                        account = db.get_account_by_tg_id(sender_id)
+                        if account:
+                            db.add_tokens(account['id'], 1)
+                            await event.reply(
+                                f"🎉 **تبریک!** @{sender.username or sender.first_name}\n"
+                                f"✅ پاسخ صحیح! ۱ الماس به حساب شما اضافه شد."
+                            )
+                            db.solve_math_challenge(challenge['id'])
+                        else:
+                            await event.reply(
+                                f"❌ شما در پنل ثبت‌نام نکرده‌اید!\n"
+                                f"لطفاً ابتدا در ربات ثبت‌نام کنید."
+                            )
+"""
+
+# توجه: این کد باید به تابع on_incoming در _register_handlers اضافه شود.
+# برای پیاده‌سازی کامل، کد بالا را در جای مناسب قرار دهید.
