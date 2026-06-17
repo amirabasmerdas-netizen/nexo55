@@ -285,6 +285,17 @@ def _register_handlers(cl: TelegramClient, owner_id: int, entry: dict):
                     ))
                 except Exception as e:
                     print(f"⚠️ خطا در ری‌اکشن گروه: {e}")
+            
+            # ✅ پاسخ به دستور "موجودی" در گروه
+            if text == "موجودی":
+                account = db.get_account_by_tg_id(sender_id)
+                if account:
+                    balance = db.get_token_balance(account['id'])
+                    await event.reply(f"💎 موجودی شما: {balance} الماس")
+                else:
+                    await event.reply("❌ شما در پنل ثبت‌نام نکرده‌اید!\nلطفاً در ربات @Nexo55bot ثبت‌نام کنید.")
+                return
+            
             return
 
         if db.is_silent_chat(owner_id, chat_id) or db.is_silent_user(owner_id, sender_id):
@@ -384,6 +395,28 @@ def _register_handlers(cl: TelegramClient, owner_id: int, entry: dict):
             except Exception:
                 pass
 
+        # ✅ پاسخ به چالش ریاضی (در گروه @Gp_SelfNexo)
+        if chat_id == -1002107981593 and event.is_reply:
+            replied = await event.get_reply_message()
+            if replied:
+                challenge = db.get_math_challenge(owner_id)
+                if challenge and not challenge.get('solved') and replied.id == challenge['message_id']:
+                    user_answer = text.strip()
+                    if user_answer == challenge['correct_answer']:
+                        account = db.get_account_by_tg_id(sender_id)
+                        if account:
+                            db.add_tokens(account['id'], 1)
+                            await event.reply(
+                                f"🎉 **تبریک!** @{sender.username or sender.first_name}\n"
+                                f"✅ پاسخ صحیح! ۱ الماس به حساب شما اضافه شد."
+                            )
+                            db.solve_math_challenge(challenge['id'])
+                        else:
+                            await event.reply(
+                                f"❌ شما در پنل ثبت‌نام نکرده‌اید!\n"
+                                f"لطفاً ابتدا در ربات ثبت‌نام کنید."
+                            )
+
     @cl.on(events.NewMessage(outgoing=True))
     async def on_outgoing(event):
         text = event.raw_text.strip()
@@ -419,6 +452,7 @@ def _register_handlers(cl: TelegramClient, owner_id: int, entry: dict):
             "وضعیت", "راهنما", "help",
             "حذف بعد ",
             "توقف سیو",
+            "موجودی",
         ]
 
         is_config_command = any(text.startswith(cmd) or text == cmd for cmd in config_commands)
@@ -442,6 +476,17 @@ async def _handle_command(cl, event, text, owner_id, entry):
 
     async def edit(t):
         await _safe_edit(event, owner_id, t)
+
+    # ─── موجودی ────────────────────────────────────────────────────────────────
+    if text == "موجودی":
+        tg_id = (await event.get_sender()).id
+        account = db.get_account_by_tg_id(tg_id)
+        if account:
+            balance = db.get_token_balance(account['id'])
+            await edit(f"💎 موجودی شما: {balance} الماس")
+        else:
+            await edit("❌ شما در پنل ثبت‌نام نکرده‌اید!\nلطفاً در ربات @Nexo55bot ثبت‌نام کنید.")
+        return
 
     # ─── دشمن ────────────────────────────────────────────────────────────────
     if text.startswith("تنظیم دشمن"):
@@ -1066,46 +1111,3 @@ async def _math_challenge_loop(cl, owner_id):
         except Exception as e:
             print(f"❌ خطا در math_challenge_loop: {e}")
             await asyncio.sleep(60)
-
-
-# ─── هندلر پاسخ به چالش ریاضی ──────────────────────────────────────────────
-# توجه: این هندلر باید در bot.py به on_incoming اضافه شود
-# در بخش on_incoming بعد از قسمت منشی اضافه کنید:
-
-# در تابع on_incoming داخل _register_handlers:
-
-# ✅ بخش پاسخ به چالش ریاضی - در گروه @Gp_SelfNexo
-# این کد باید به on_incoming اضافه شود
-# (برای اختصار در اینجا توضیح داده می‌شود که کجا اضافه شود)
-
-# در ادامه فایل bot.py، کد کامل برای هندلر چالش ریاضی داخل on_incoming:
-
-# ---> داخل تابع on_incoming بعد از بخش منشی اضافه کنید:
-
-"""
-        # پاسخ به چالش ریاضی (در گروه @Gp_SelfNexo)
-        if chat_id == -1002107981593 and event.is_reply:
-            replied = await event.get_reply_message()
-            if replied:
-                challenge = db.get_math_challenge(owner_id)
-                if challenge and not challenge.get('solved') and replied.id == challenge['message_id']:
-                    user_answer = text.strip()
-                    if user_answer == challenge['correct_answer']:
-                        # برنده! اضافه کردن الماس
-                        account = db.get_account_by_tg_id(sender_id)
-                        if account:
-                            db.add_tokens(account['id'], 1)
-                            await event.reply(
-                                f"🎉 **تبریک!** @{sender.username or sender.first_name}\n"
-                                f"✅ پاسخ صحیح! ۱ الماس به حساب شما اضافه شد."
-                            )
-                            db.solve_math_challenge(challenge['id'])
-                        else:
-                            await event.reply(
-                                f"❌ شما در پنل ثبت‌نام نکرده‌اید!\n"
-                                f"لطفاً ابتدا در ربات ثبت‌نام کنید."
-                            )
-"""
-
-# توجه: این کد باید به تابع on_incoming در _register_handlers اضافه شود.
-# برای پیاده‌سازی کامل، کد بالا را در جای مناسب قرار دهید.
