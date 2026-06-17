@@ -10,6 +10,25 @@ _bot = None
 BOT_USERNAME = None
 OWNER_TG_ID = config.OWNER_TG_ID
 
+# ─── کش کاربران ──────────────────────────────────────────────────────────────
+_user_cache = {}
+_user_cache_time = {}
+
+def get_user_account(tg_id: int):
+    """دریافت حساب کاربر با کش 60 ثانیه"""
+    now = datetime.datetime.now().timestamp()
+    
+    # بررسی کش
+    if tg_id in _user_cache:
+        if now - _user_cache_time.get(tg_id, 0) < 60:
+            return _user_cache[tg_id]
+    
+    # دریافت از دیتابیس
+    account = db.get_account_by_tg_id(tg_id)
+    _user_cache[tg_id] = account
+    _user_cache_time[tg_id] = now
+    return account
+
 # ─── کش برای کاهش کوئری ──────────────────────────────────────────────────────
 _user_settings_cache = {}
 _cache_timestamps = {}
@@ -58,14 +77,6 @@ def start_token_bot():
             _time.sleep(3)
 
     # ─── توابع کمکی ──────────────────────────────────────────────────────────
-    def get_user_account(tg_id: int):
-        """دریافت حساب کاربر با کش"""
-        return db.get_account_by_tg_id(tg_id)
-
-    def get_user_balance(owner_id: int):
-        """دریافت موجودی توکن با کش"""
-        return db.get_token_balance(owner_id)
-
     def get_user_stats(owner_id: int):
         """دریافت آمار کاربر با کش"""
         return db.get_token_stats(owner_id)
@@ -115,6 +126,7 @@ def start_token_bot():
         markup.add("🔗 رفرال", "🛒 خرید توکن")
         markup.add("⚙️ تنظیمات سلف", "📊 وضعیت سلف")
         markup.add("📖 راهنما", "👤 پروفایل من")
+        markup.add("🔄 به‌روزرسانی منو")  # ✅ اضافه شد
         return markup
 
     def settings_keyboard():
@@ -181,6 +193,7 @@ def start_token_bot():
         markup.add("⚙️ تنظیمات سلف", "📊 وضعیت سلف")
         markup.add("📢 مدیریت چنل‌ها", "👥 مدیریت کاربران")
         markup.add("📖 راهنما", "👤 پروفایل من")
+        markup.add("🔄 به‌روزرسانی منو")  # ✅ اضافه شد
         return markup
 
     def owner_users_keyboard():
@@ -224,23 +237,43 @@ def start_token_bot():
             if not require_membership(message):
                 return
 
-            # ۳. ادامه
-            site_url = getattr(config, "SITE_URL", "")
+            # ۳. ✅ بررسی کامل حساب کاربری
             account = get_user_account(tg_id)
+            site_url = getattr(config, "SITE_URL", "")
 
+            # ❌ اگر حساب وجود نداشت
             if not account:
                 markup = types.InlineKeyboardMarkup()
                 if site_url:
-                    markup.add(types.InlineKeyboardButton("🌐 ورود به پنل وب", url=site_url))
+                    markup.add(types.InlineKeyboardButton("🌐 ثبت‌نام در پنل", url=site_url))
                 _bot.reply_to(message, 
                     "👋 <b>سلام!</b>\n\n"
-                    "برای استفاده از ربات:\n"
+                    "❌ شما هنوز در پنل وب ثبت‌نام نکرده‌اید!\n\n"
+                    "📝 مراحل:\n"
                     "1️⃣ در پنل وب ثبت‌نام کنید\n"
                     "2️⃣ حساب تلگرام را وصل کنید\n"
                     "3️⃣ دوباره /start بزنید", 
                     reply_markup=markup if site_url else None)
                 return
 
+            # ✅ حساب وجود دارد ولی لاگین نیست
+            logged_in = db.get_setting(account["id"], "logged_in") == "1"
+            if not logged_in:
+                markup = types.InlineKeyboardMarkup()
+                if site_url:
+                    markup.add(types.InlineKeyboardButton("🌐 اتصال به تلگرام", url=site_url))
+                _bot.reply_to(message, 
+                    f"👋 <b>سلام {account['username']}!</b>\n\n"
+                    "🔗 شما در پنل وب ثبت‌نام کرده‌اید ولی حساب تلگرام متصل نیست!\n\n"
+                    "📝 مراحل:\n"
+                    "1️⃣ وارد پنل وب شوید\n"
+                    "2️⃣ روی «اتصال به تلگرام» کلیک کنید\n"
+                    "3️⃣ شماره و کد را وارد کنید\n"
+                    "4️⃣ دوباره /start بزنید", 
+                    reply_markup=markup if site_url else None)
+                return
+
+            # ✅ کاربر کامل است - نمایش منو
             stats = get_user_stats(account["id"])
             settings = get_user_settings(account["id"])
             
@@ -255,7 +288,7 @@ def start_token_bot():
             
             _bot.reply_to(
                 message,
-                f"👋 سلام <b>{account['username']}</b>!\n\n"
+                f"👋 خوش برگشتی <b>{account['username']}</b>!\n\n"
                 f"📊 <b>وضعیت سلف:</b> {bot_status}\n"
                 f"🪙 <b>موجودی توکن:</b> {stats['balance']}\n"
                 f"📈 <b>کل دریافتی:</b> {stats['total_earned']}\n\n"
@@ -300,6 +333,59 @@ def start_token_bot():
                 )
         except Exception as e:
             print(f"❌ خطا در callback_check_join: {e}")
+
+    # ─── دکمه به‌روزرسانی منو ──────────────────────────────────────────────
+    @_bot.message_handler(func=lambda m: m.text == "🔄 به‌روزرسانی منو")
+    def cmd_refresh_menu(message):
+        """به‌روزرسانی منوی کاربر"""
+        try:
+            tg_id = message.from_user.id
+            
+            if not require_membership(message):
+                return
+            
+            # پاک کردن کش کاربر
+            _user_cache.pop(tg_id, None)
+            _user_cache_time.pop(tg_id, None)
+            
+            account = get_user_account(tg_id)
+            if not account:
+                return _bot.reply_to(message, "⚠️ ابتدا در پنل وب ثبت‌نام کنید.", 
+                                   reply_markup=types.ReplyKeyboardRemove())
+            
+            # ✅ بررسی مجدد لاگین
+            logged_in = db.get_setting(account["id"], "logged_in") == "1"
+            if not logged_in:
+                site_url = getattr(config, "SITE_URL", "")
+                markup = types.InlineKeyboardMarkup()
+                if site_url:
+                    markup.add(types.InlineKeyboardButton("🌐 اتصال به تلگرام", url=site_url))
+                _bot.reply_to(message, 
+                    f"🔗 حساب شما متصل نیست!\n\n"
+                    f"👤 {account['username']}\n"
+                    f"📝 لطفاً از پنل وب اتصال را کامل کنید.",
+                    reply_markup=markup if site_url else None)
+                return
+            
+            stats = get_user_stats(account["id"])
+            settings = get_user_settings(account["id"])
+            
+            is_owner = (tg_id == config.OWNER_TG_ID)
+            markup = owner_keyboard() if is_owner else user_keyboard()
+            bot_status = "🟢 فعال" if settings.get("self_bot_active") == "1" else "🔴 غیرفعال"
+            
+            _bot.reply_to(
+                message,
+                f"🔄 <b>منو به‌روزرسانی شد</b> ✅\n\n"
+                f"👋 {account['username']}\n"
+                f"📊 وضعیت سلف: {bot_status}\n"
+                f"🪙 موجودی: {stats['balance']}\n"
+                f"📈 کل دریافتی: {stats['total_earned']}",
+                reply_markup=markup
+            )
+        except Exception as e:
+            print(f"❌ خطا در cmd_refresh_menu: {e}")
+            _bot.reply_to(message, f"⚠️ خطا: {e}")
 
     # ─── دکمه‌های اصلی ────────────────────────────────────────────────────
     @_bot.message_handler(func=lambda m: m.text == "💰 موجودی")
@@ -546,11 +632,9 @@ def start_token_bot():
             if not account:
                 return _bot.reply_to(message, "⚠️ ابتدا در پنل وب ثبت‌نام کنید.")
             
-            # از bot_manager برای استارت استفاده کنید
             from bot import bot_manager
             import asyncio
             
-            # دریافت event loop
             try:
                 loop = asyncio.get_event_loop()
             except:
@@ -622,7 +706,6 @@ def start_token_bot():
             new_status = "0" if status == "1" else "1"
             db.set_setting(account["id"], "secretary_active", new_status)
             
-            # پاک کردن کش
             _user_settings_cache.pop(f"{account['id']}:secretary_active", None)
             
             _bot.reply_to(message, 
@@ -1067,7 +1150,6 @@ def start_token_bot():
                 _bot.reply_to(message, "🔙 بازگشت به لیست‌ها.", reply_markup=lists_keyboard())
                 return
             
-            # بررسی ریپلای
             replied = message.reply_to_message
             if replied:
                 sender = replied.from_user
@@ -1079,7 +1161,6 @@ def start_token_bot():
                             reply_markup=enemy_keyboard())
                 return
             
-            # بررسی آیدی عددی
             try:
                 user_id = int(message.text.strip())
                 db.add_enemy(owner_id, user_id, None, str(user_id))
