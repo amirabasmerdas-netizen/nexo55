@@ -23,3 +23,7 @@ services:
         sync: false
       - key: PORT
         value: "10000"
+      # ─── Supabase ──────────────────────────────────────────────────────────
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
