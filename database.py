@@ -198,6 +198,50 @@ def remove_forced_channel(username: str) -> bool:
 def check_user_membership(bot, user_id: int) -> tuple:
     return cache.check_user_membership(bot, user_id)
 
+# ─── توابع چالش ──────────────────────────────────────────────────────────────
+from database_supabase import (
+    create_math_challenge as supa_create_math_challenge,
+    get_math_challenge as supa_get_math_challenge,
+    solve_math_challenge as supa_solve_math_challenge,
+    create_worldcup_bet as supa_create_worldcup_bet,
+    get_active_worldcup_bet as supa_get_active_worldcup_bet,
+    place_bet as supa_place_bet,
+    get_bet_users as supa_get_bet_users,
+    finish_worldcup_bet as supa_finish_worldcup_bet,
+    get_challenge_settings as supa_get_challenge_settings,
+    update_challenge_settings as supa_update_challenge_settings,
+)
+
+def create_math_challenge(owner_id, challenge_text, correct_answer, chat_id, message_id=None):
+    return supa_create_math_challenge(owner_id, challenge_text, correct_answer, chat_id, message_id)
+
+def get_math_challenge(owner_id):
+    return supa_get_math_challenge(owner_id)
+
+def solve_math_challenge(challenge_id):
+    return supa_solve_math_challenge(challenge_id)
+
+def create_worldcup_bet(owner_id, team1, team2, match_time, photo_url=None):
+    return supa_create_worldcup_bet(owner_id, team1, team2, match_time, photo_url)
+
+def get_active_worldcup_bet(owner_id):
+    return supa_get_active_worldcup_bet(owner_id)
+
+def place_bet(bet_id, user_tg_id, selected_team, bet_amount):
+    return supa_place_bet(bet_id, user_tg_id, selected_team, bet_amount)
+
+def get_bet_users(bet_id):
+    return supa_get_bet_users(bet_id)
+
+def finish_worldcup_bet(bet_id, winner):
+    return supa_finish_worldcup_bet(bet_id, winner)
+
+def get_challenge_settings(owner_id):
+    return supa_get_challenge_settings(owner_id)
+
+def update_challenge_settings(owner_id, key, value):
+    return supa_update_challenge_settings(owner_id, key, value)
+
 # ─── صادرات ────────────────────────────────────────────────────────────────────
 __all__ = [
     # حساب‌ها
