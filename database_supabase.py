@@ -42,7 +42,6 @@ def execute_query(query: str, params: tuple = None, fetch_one: bool = False, fet
         return cur.rowcount
     except psycopg2.OperationalError as e:
         print(f"❌ خطای اتصال به دیتابیس: {e}")
-        # تلاش مجدد برای اتصال
         global _conn
         _conn = None
         raise
@@ -132,7 +131,58 @@ def init_tables():
             deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """,
-        # ایندکس‌ها برای بهبود عملکرد
+        # جدول چالش‌های ریاضی
+        """
+        CREATE TABLE IF NOT EXISTS amel_math_challenges (
+            id SERIAL PRIMARY KEY,
+            owner_id INTEGER NOT NULL,
+            challenge_text TEXT NOT NULL,
+            correct_answer TEXT NOT NULL,
+            message_id BIGINT,
+            chat_id BIGINT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            solved BOOLEAN DEFAULT FALSE
+        )
+        """,
+        # جدول شرط‌بندی جام جهانی
+        """
+        CREATE TABLE IF NOT EXISTS amel_worldcup_bets (
+            id SERIAL PRIMARY KEY,
+            owner_id INTEGER NOT NULL,
+            team1 TEXT NOT NULL,
+            team2 TEXT NOT NULL,
+            match_time TIMESTAMP NOT NULL,
+            photo_file_id TEXT,
+            message_id BIGINT,
+            chat_id BIGINT,
+            winner TEXT,
+            is_finished BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        # جدول شرط‌های کاربران
+        """
+        CREATE TABLE IF NOT EXISTS amel_user_bets (
+            id SERIAL PRIMARY KEY,
+            bet_id INTEGER NOT NULL,
+            user_tg_id BIGINT NOT NULL,
+            selected_team TEXT NOT NULL,
+            bet_amount INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(bet_id, user_tg_id)
+        )
+        """,
+        # جدول تنظیمات چالش
+        """
+        CREATE TABLE IF NOT EXISTS amel_challenge_settings (
+            owner_id INTEGER PRIMARY KEY,
+            math_challenge_active BOOLEAN DEFAULT FALSE,
+            worldcup_challenge_active BOOLEAN DEFAULT FALSE,
+            last_math_challenge TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        # ایندکس‌ها
         """
         CREATE INDEX IF NOT EXISTS idx_amel_accounts_telegram_user_id 
         ON amel_accounts(telegram_user_id)
@@ -156,6 +206,18 @@ def init_tables():
         """
         CREATE INDEX IF NOT EXISTS idx_amel_deleted_owner_id 
         ON amel_deleted_messages(owner_id)
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_math_challenges_owner 
+        ON amel_math_challenges(owner_id, solved)
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_worldcup_bets_owner 
+        ON amel_worldcup_bets(owner_id, is_finished)
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_user_bets_bet 
+        ON amel_user_bets(bet_id)
         """,
     ]
     
@@ -321,7 +383,6 @@ def get_setting(owner_id: int, key: str, default=None) -> str:
 
 def set_setting(owner_id: int, key: str, value):
     try:
-        # اگر value None باشد، به string خالی تبدیل کن
         value_str = str(value) if value is not None else ""
         
         query = """
@@ -332,7 +393,6 @@ def set_setting(owner_id: int, key: str, value):
         """
         execute_query(query, (owner_id, key, value_str))
         
-        # به‌روزرسانی کش
         _settings_cache[f"{owner_id}:{key}"] = value_str
         print(f"✅ تنظیم {key} برای کاربر {owner_id} = {value_str} ذخیره شد")
     except Exception as e:
@@ -389,7 +449,7 @@ def add_tokens(owner_id: int, amount: int):
             WHERE owner_id = %s
         """
         execute_query(query, (amount, amount, owner_id))
-        print(f"✅ {amount} توکن به کاربر {owner_id} اضافه شد")
+        print(f"✅ {amount} الماس به کاربر {owner_id} اضافه شد")
     except Exception as e:
         print(f"❌ add_tokens error: {e}")
 
@@ -402,7 +462,7 @@ def deduct_tokens(owner_id: int, amount: int) -> bool:
             return False
         query = "UPDATE amel_tokens SET balance = balance - %s WHERE owner_id = %s"
         execute_query(query, (amount, owner_id))
-        print(f"✅ {amount} توکن از کاربر {owner_id} کسر شد")
+        print(f"✅ {amount} الماس از کاربر {owner_id} کسر شد")
         return True
     except Exception as e:
         print(f"❌ deduct_tokens error: {e}")
@@ -426,7 +486,7 @@ def claim_daily_token(owner_id: int):
             WHERE owner_id = %s
         """
         execute_query(query, (DAILY_TOKEN_GIFT, DAILY_TOKEN_GIFT, today.isoformat(), owner_id))
-        return True, f"🎁 {DAILY_TOKEN_GIFT} توکن دریافت کردید!"
+        return True, f"🎁 {DAILY_TOKEN_GIFT} الماس دریافت کردید!"
     except Exception as e:
         print(f"❌ claim_daily_token error: {e}")
         return False, "خطا در دریافت هدیه"
@@ -452,25 +512,21 @@ def get_token_stats(owner_id: int) -> dict:
 def process_referral(referrer_owner_id: int, referred_tg_id: int) -> bool:
     from config import REFERRAL_TOKENS
     try:
-        # بررسی اینکه کاربر قبلاً معرفی شده یا نه
         query = "SELECT 1 FROM amel_referrals WHERE referred_tg_id = %s"
         if execute_query(query, (int(referred_tg_id),), fetch_one=True):
             print(f"❌ کاربر {referred_tg_id} قبلاً معرفی شده است")
             return False
         
-        # بررسی وجود معرف
         if not get_account(referrer_owner_id):
             print(f"❌ معرف با ID {referrer_owner_id} وجود ندارد")
             return False
         
-        # ثبت رفرال
         query = """
             INSERT INTO amel_referrals (referrer_owner_id, referred_tg_id, created_at) 
             VALUES (%s, %s, %s)
         """
         execute_query(query, (referrer_owner_id, int(referred_tg_id), datetime.datetime.now().isoformat()))
         
-        # اضافه کردن توکن به معرف
         add_tokens(referrer_owner_id, REFERRAL_TOKENS)
         print(f"✅ رفرال ثبت شد: {referrer_owner_id} -> {referred_tg_id}")
         return True
@@ -579,14 +635,6 @@ def get_deleted_messages(owner_id: int, limit=50):
         print(f"❌ get_deleted_messages error: {e}")
         return []
 
-# ─── مقداردهی اولیه ──────────────────────────────────────────────────────────
-try:
-    init_tables()
-except Exception as e:
-    print(f"❌ خطا در ایجاد جداول: {e}")
-
-print("✅ database_supabase.py بارگذاری شد!")
-
 # ─── چالش‌های ریاضی ──────────────────────────────────────────────────────────
 def create_math_challenge(owner_id: int, challenge_text: str, correct_answer: str, chat_id: int, message_id: int = None):
     try:
@@ -624,14 +672,14 @@ def solve_math_challenge(challenge_id: int):
         return False
 
 # ─── چالش جام جهانی ──────────────────────────────────────────────────────────
-def create_worldcup_bet(owner_id: int, team1: str, team2: str, match_time: str, photo_url: str = None):
+def create_worldcup_bet(owner_id: int, team1: str, team2: str, match_time: str, photo_file_id: str = None):
     try:
         query = """
-            INSERT INTO amel_worldcup_bets (owner_id, team1, team2, match_time, photo_url, created_at)
+            INSERT INTO amel_worldcup_bets (owner_id, team1, team2, match_time, photo_file_id, created_at)
             VALUES (%s, %s, %s, %s, %s, %s)
             RETURNING id
         """
-        result = execute_query(query, (owner_id, team1, team2, match_time, photo_url, datetime.datetime.now().isoformat()), fetch_one=True)
+        result = execute_query(query, (owner_id, team1, team2, match_time, photo_file_id, datetime.datetime.now().isoformat()), fetch_one=True)
         return result['id'] if result else None
     except Exception as e:
         print(f"❌ create_worldcup_bet error: {e}")
@@ -687,7 +735,6 @@ def get_challenge_settings(owner_id: int):
         query = "SELECT * FROM amel_challenge_settings WHERE owner_id = %s"
         result = execute_query(query, (owner_id,), fetch_one=True)
         if not result:
-            # ایجاد تنظیمات پیش‌فرض
             query = """
                 INSERT INTO amel_challenge_settings (owner_id, math_challenge_active, worldcup_challenge_active, updated_at)
                 VALUES (%s, FALSE, FALSE, %s)
@@ -712,3 +759,11 @@ def update_challenge_settings(owner_id: int, key: str, value):
     except Exception as e:
         print(f"❌ update_challenge_settings error: {e}")
         return False
+
+# ─── مقداردهی اولیه ──────────────────────────────────────────────────────────
+try:
+    init_tables()
+except Exception as e:
+    print(f"❌ خطا در ایجاد جداول: {e}")
+
+print("✅ database_supabase.py بارگذاری شد!")
