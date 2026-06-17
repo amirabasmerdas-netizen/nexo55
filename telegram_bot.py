@@ -1534,7 +1534,6 @@ def start_token_bot():
             
             match_time = message.text.strip()
             
-            # بررسی فرمت ساعت (فقط HH:MM)
             if not re.match(r'^\d{2}:\d{2}$', match_time):
                 _bot.reply_to(
                     message, 
@@ -1545,7 +1544,6 @@ def start_token_bot():
                 )
                 return
             
-            # اضافه کردن تاریخ امروز با منطقه زمانی ایران
             iran_tz = datetime.timezone(datetime.timedelta(hours=3, minutes=30))
             today = datetime.datetime.now(iran_tz).date()
             full_datetime = f"{today.isoformat()} {match_time}:00"
@@ -1868,7 +1866,7 @@ def start_token_bot():
             _bot.reply_to(message, f"❌ خطا: {str(e)}", reply_markup=owner_keyboard())
 
     # ─── پاسخ به دستور موجودی در گروه ──────────────────────────────────────────
-    @_bot.message_handler(func=lambda m: m.chat.type in ['group', 'supergroup'] and m.text == "موجودی")
+    @_bot.message_handler(func=lambda m: m.chat.type in ['group', 'supergroup'] and m.text and m.text.strip() == "موجودی")
     def cmd_group_balance(message):
         try:
             account = get_user_account(message.from_user.id)
@@ -1882,43 +1880,56 @@ def start_token_bot():
             _bot.reply_to(message, f"⚠️ خطا: {str(e)}")
 
     # ─── پاسخ به دستور شرط‌بندی در گروه ──────────────────────────────────────────
-    @_bot.message_handler(func=lambda m: m.chat.type in ['group', 'supergroup'] and m.text.startswith("شرط بندی"))
+    @_bot.message_handler(func=lambda m: m.chat.type in ['group', 'supergroup'] and m.text and m.text.strip().startswith("شرط بندی"))
     def cmd_bet(message):
         try:
-            parts = message.text.split()
-            if len(parts) != 2:
-                _bot.reply_to(message, "❌ فرمت صحیح:\n<code>شرط بندی [مقدار]</code>\nمثال: <code>شرط بندی 100</code>")
+            # پاک کردن فاصله‌های اضافی
+            text = message.text.strip()
+            parts = text.split()
+            
+            # اگر فقط "شرط بندی" نوشته شده بدون مقدار
+            if len(parts) < 3:
+                _bot.reply_to(message, 
+                    "❌ فرمت صحیح:\n"
+                    "<code>شرط بندی [مقدار]</code>\n"
+                    "مثال: <code>شرط بندی 100</code>")
                 return
             
+            # دریافت مقدار شرط (آخرین قسمت)
             try:
-                bet_amount = int(parts[1])
+                bet_amount = int(parts[-1])
                 if bet_amount <= 0:
                     _bot.reply_to(message, "❌ مقدار باید بیشتر از ۰ باشد.")
                     return
             except ValueError:
-                _bot.reply_to(message, "❌ مقدار باید عدد باشد.")
+                _bot.reply_to(message, "❌ مقدار باید عدد باشد.\nمثال: <code>شرط بندی 100</code>")
                 return
             
             chat_id = message.chat.id
             player1_id = message.from_user.id
             
+            # بررسی اینکه کاربر در پنل ثبت‌نام کرده
             account = db.get_account_by_tg_id(player1_id)
             if not account:
                 _bot.reply_to(message, "❌ شما در پنل ثبت‌نام نکرده‌اید!\nلطفاً در ربات @Nexo55bot ثبت‌نام کنید.")
                 return
             
+            # بررسی موجودی کاربر
             balance = db.get_token_balance(account['id'])
             if balance < bet_amount:
                 _bot.reply_to(message, f"❌ موجودی ناکافی!\n💎 موجودی شما: {balance} الماس\n📊 نیاز: {bet_amount} الماس")
                 return
             
+            # بررسی اینکه بازی فعالی در گروه وجود ندارد
             active_game = db.get_active_bet_game(chat_id)
             if active_game:
                 _bot.reply_to(message, "❌ یک بازی شرط‌بندی فعال در این گروه وجود دارد!\nلطفاً منتظر پایان آن باشید.")
                 return
             
+            # کسر الماس از بازیکن اول
             db.deduct_tokens(account['id'], bet_amount)
             
+            # ایجاد بازی
             markup = types.InlineKeyboardMarkup(row_width=1)
             markup.add(types.InlineKeyboardButton("🎲 شرکت در قرعه‌کشی", callback_data="join_bet"))
             
@@ -1932,6 +1943,7 @@ def start_token_bot():
                 reply_markup=markup
             )
             
+            # ذخیره در دیتابیس
             db.create_bet_game(1, chat_id, player1_id, bet_amount, sent.message_id)
             
         except Exception as e:
