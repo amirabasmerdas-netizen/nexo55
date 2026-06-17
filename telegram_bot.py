@@ -1887,11 +1887,9 @@ def start_token_bot():
     @_bot.message_handler(func=lambda m: m.chat.type in ['group', 'supergroup'] and m.text and m.text.strip().startswith("شرط بندی"))
     def cmd_bet(message):
         try:
-            # پاک کردن فاصله‌های اضافی
             text = message.text.strip()
             parts = text.split()
             
-            # اگر فقط "شرط بندی" نوشته شده بدون مقدار
             if len(parts) < 3:
                 _bot.reply_to(message, 
                     "❌ فرمت صحیح:\n"
@@ -1899,7 +1897,6 @@ def start_token_bot():
                     "مثال: <code>شرط بندی 100</code>")
                 return
             
-            # دریافت مقدار شرط (آخرین قسمت)
             try:
                 bet_amount = int(parts[-1])
                 if bet_amount <= 0:
@@ -1912,30 +1909,23 @@ def start_token_bot():
             chat_id = message.chat.id
             player1_id = message.from_user.id
             
-            # بررسی اینکه کاربر در پنل ثبت‌نام کرده
             account = db.get_account_by_tg_id(player1_id)
             if not account:
                 _bot.reply_to(message, "❌ شما در پنل ثبت‌نام نکرده‌اید!\nلطفاً در ربات @Nexo55bot ثبت‌نام کنید.")
                 return
             
-            # بررسی موجودی کاربر
             balance = db.get_token_balance(account['id'])
             if balance < bet_amount:
                 _bot.reply_to(message, f"❌ موجودی ناکافی!\n💎 موجودی شما: {balance} الماس\n📊 نیاز: {bet_amount} الماس")
                 return
             
-            # بررسی اینکه بازی فعالی در گروه وجود ندارد
-            active_game = db.get_active_bet_game(chat_id)
-            if active_game:
-                _bot.reply_to(message, "❌ یک بازی شرط‌بندی فعال در این گروه وجود دارد!\nلطفاً منتظر پایان آن باشید.")
-                return
-            
             # کسر الماس از بازیکن اول
             db.deduct_tokens(account['id'], bet_amount)
             
-            # ایجاد بازی
+            # ایجاد دکمه با شناسه یکتا
+            import time
             markup = types.InlineKeyboardMarkup(row_width=1)
-            markup.add(types.InlineKeyboardButton("🎲 شرکت در قرعه‌کشی", callback_data="join_bet"))
+            markup.add(types.InlineKeyboardButton("🎲 شرکت در قرعه‌کشی", callback_data=f"join_bet_{chat_id}_{int(time.time())}"))
             
             sent = _bot.reply_to(
                 message,
@@ -1943,11 +1933,10 @@ def start_token_bot():
                 f"👤 بازیکن اول: @{message.from_user.username or message.from_user.first_name}\n"
                 f"💰 مبلغ شرط: <b>{bet_amount}</b> الماس\n\n"
                 f"👇 روی دکمه زیر کلیک کنید تا در قرعه‌کشی شرکت کنید!\n"
-                f"⏳ منتظر یک بازیکن دیگر...",
+                f"⏳ این بازی تا ۱ ساعت اعتبار دارد.",
                 reply_markup=markup
             )
             
-            # ذخیره در دیتابیس
             db.create_bet_game(1, chat_id, player1_id, bet_amount, sent.message_id)
             
         except Exception as e:
@@ -1955,13 +1944,18 @@ def start_token_bot():
             _bot.reply_to(message, f"⚠️ خطا: {str(e)}")
 
     # ─── پردازش دکمه شرکت در قرعه‌کشی شرط‌بندی ──────────────────────────────────
-    @_bot.callback_query_handler(func=lambda call: call.data == "join_bet")
+    @_bot.callback_query_handler(func=lambda call: call.data.startswith('join_bet_'))
     def callback_join_bet(call):
         try:
-            chat_id = call.message.chat.id
+            parts = call.data.split('_')
+            if len(parts) < 3:
+                _bot.answer_callback_query(call.id, "❌ لینک نامعتبر.", show_alert=True)
+                return
+            
+            chat_id = int(parts[2])
             player2_id = call.from_user.id
             
-            game = db.get_active_bet_game(chat_id)
+            game = db.get_bet_game_by_message(chat_id, call.message.message_id)
             if not game:
                 _bot.answer_callback_query(call.id, "❌ این بازی منقضی شده است.", show_alert=True)
                 return
@@ -2030,220 +2024,140 @@ def start_token_bot():
             logger.error(f"❌ خطا در callback_join_bet: {e}")
             _bot.answer_callback_query(call.id, f"❌ خطا: {str(e)}", show_alert=True)
 
-    # ─── ❌ نادیده گرفتن همه پیام‌های گروه (به جز دستورات خاص) ──────────────────
-    @_bot.message_handler(func=lambda m: m.chat.type in ['group', 'supergroup'])
-    def ignore_group_messages(message):
-        # این تابع همه پیام‌های گروه را که توسط هندلرهای خاص پردازش نشده‌اند، نادیده می‌گیرد
-        # هیچ کاری انجام نمی‌دهد
-        pass
-
-    # ─── دستورات مالک (فقط پیوی) ──────────────────────────────────────────────
-    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "📢 مدیریت چنل‌ها")
-    def cmd_admin_channels(message):
+    # ─── پاک‌سازی خودکار شرط‌بندی‌های منقضی شده ──────────────────────────────────
+    def clean_expired_bets():
         try:
-            if message.from_user.id != config.OWNER_TG_ID: return
-            
-            channels = cache.get_forced_channels()
-            markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-            markup.add("➕ افزودن چنل", "❌ حذف چنل")
-            markup.add("📋 نمایش چنل‌ها", "🔙 بازگشت")
-            
-            text = "📢 <b>مدیریت چنل‌های اجباری</b>\n\n"
-            if channels:
-                text += "چنل‌های فعلی:\n" + "\n".join([f"🔸 {ch}" for ch in channels])
-            else:
-                text += "📭 لیست چنل‌ها خالی است."
-            
-            _bot.reply_to(message, text, reply_markup=markup)
+            expired_games = db.get_expired_bet_games()
+            for game in expired_games:
+                db.expire_bet_game(game['id'])
+                
+                account = db.get_account_by_tg_id(game['player1_id'])
+                if account:
+                    db.add_tokens(account['id'], game['bet_amount'])
+                
+                try:
+                    _bot.send_message(
+                        game['chat_id'],
+                        f"⏰ **بازی منقضی شد!**\n\n"
+                        f"شرط‌بندی با مبلغ <b>{game['bet_amount']}</b> الماس\n"
+                        f"پس از ۱ ساعت حریفی پیدا نشد.\n"
+                        f"💎 الماس به بازیکن اول برگشت داده شد."
+                    )
+                    
+                    try:
+                        _bot.edit_message_reply_markup(
+                            chat_id=game['chat_id'],
+                            message_id=game['message_id'],
+                            reply_markup=None
+                        )
+                    except:
+                        pass
+                        
+                except Exception as e:
+                    logger.error(f"❌ خطا در ارسال پیام انقضا: {e}")
+                    
         except Exception as e:
-            logger.error(f"❌ خطا در cmd_admin_channels: {e}")
+            logger.error(f"❌ خطا در clean_expired_bets: {e}")
 
-    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "➕ افزودن چنل")
-    def cmd_add_channel_prompt(message):
-        try:
-            if message.from_user.id != config.OWNER_TG_ID: return
-            
-            msg = _bot.reply_to(message, 
-                "✏️ <b>یوزرنیم کانال را وارد کنید:</b>\n\n"
-                "مثال: <code>@ChannelID</code>",
-                reply_markup=types.ReplyKeyboardMarkup(resize_keyboard=True).add("🔙 بازگشت"))
-            
-            _bot.register_next_step_handler(msg, process_add_channel)
-        except Exception as e:
-            logger.error(f"❌ خطا در cmd_add_channel_prompt: {e}")
+    # ─── تایمر پاک‌سازی خودکار ──────────────────────────────────────────────────
+    def start_cleanup_timer():
+        def cleanup_loop():
+            while True:
+                time.sleep(300)
+                try:
+                    clean_expired_bets()
+                except Exception as e:
+                    logger.error(f"❌ خطا در cleanup_loop: {e}")
+        
+        t = threading.Thread(target=cleanup_loop, daemon=True)
+        t.start()
+        logger.info("✅ تایمر پاک‌سازی شرط‌بندی‌ها شروع شد (هر ۵ دقیقه)")
 
-    def process_add_channel(message):
+    # ─── پاسخ به دستور انتقال الماس ──────────────────────────────────────────────
+    @_bot.message_handler(func=lambda m: m.text and m.text.strip().startswith("انتقال"))
+    def cmd_transfer(message):
         try:
-            if message.text == "🔙 بازگشت":
-                _bot.reply_to(message, "🔙 بازگشت.", reply_markup=owner_keyboard())
-                return
-            
-            username = message.text.strip()
-            if cache.add_forced_channel(username):
-                _bot.reply_to(message, f"✅ چنل {username} اضافه شد!", 
-                            reply_markup=owner_keyboard())
-            else:
-                _bot.reply_to(message, "❌ خطا یا چنل تکراری است.", 
-                            reply_markup=owner_keyboard())
-        except Exception as e:
-            logger.error(f"❌ خطا در process_add_channel: {e}")
-
-    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "❌ حذف چنل")
-    def cmd_remove_channel_prompt(message):
-        try:
-            if message.from_user.id != config.OWNER_TG_ID: return            
-            channels = cache.get_forced_channels()
-            if not channels:
-                _bot.reply_to(message, "📭 لیست چنل‌ها خالی است.", reply_markup=owner_keyboard())
-                return
-            
-            markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-            for ch in channels:
-                markup.add(f"🗑️ {ch}")
-            markup.add("🔙 بازگشت")
-            
-            _bot.reply_to(message, 
-                "✏️ <b>روی چنل مورد نظر برای حذف کلیک کنید:</b>",
-                reply_markup=markup)
-        except Exception as e:
-            logger.error(f"❌ خطا در cmd_remove_channel_prompt: {e}")
-
-    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text.startswith("🗑️ @"))
-    def cmd_remove_channel(message):
-        try:
-            if message.from_user.id != config.OWNER_TG_ID: return
-            
-            username = message.text.replace("🗑️ ", "")
-            if cache.remove_forced_channel(username):
-                _bot.reply_to(message, f"✅ چنل {username} حذف شد!", 
-                            reply_markup=owner_keyboard())
-            else:
-                _bot.reply_to(message, f"❌ چنل {username} یافت نشد.", 
-                            reply_markup=owner_keyboard())
-        except Exception as e:
-            logger.error(f"❌ خطا در cmd_remove_channel: {e}")
-
-    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "📋 نمایش چنل‌ها")
-    def cmd_show_channels(message):
-        try:
-            if message.from_user.id != config.OWNER_TG_ID: return
-            
-            channels = cache.get_forced_channels()
-            if not channels:
-                _bot.reply_to(message, "📭 لیست چنل‌ها خالی است.", 
-                            reply_markup=owner_keyboard())
-                return
-            
-            text = "📋 <b>چنل‌های اجباری فعلی:</b>\n\n"
-            for ch in channels:
-                text += f"🔸 {ch}\n"
-            
-            _bot.reply_to(message, text, reply_markup=owner_keyboard())
-        except Exception as e:
-            logger.error(f"❌ خطا در cmd_show_channels: {e}")
-
-    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "👥 مدیریت کاربران")
-    def cmd_admin_users(message):
-        try:
-            if message.from_user.id != config.OWNER_TG_ID: return
-            
-            users = db.get_all_accounts()
-            
-            text = f"👥 <b>مدیریت کاربران</b>\n\n"
-            text += f"تعداد کل کاربران: <b>{len(users)}</b> نفر\n\n"
-            
-            if users:
-                for i, u in enumerate(users[:10], 1):
-                    bal = db.get_token_balance(u['id'])
-                    text += f"{i}. {u['username']} — 💎{bal}\n"
-                if len(users) > 10:
-                    text += f"\nو {len(users) - 10} نفر دیگر..."
-            
-            _bot.reply_to(message, text, reply_markup=owner_users_keyboard())
-        except Exception as e:
-            logger.error(f"❌ خطا در cmd_admin_users: {e}")
-
-    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "📋 لیست کاربران")
-    def cmd_list_users(message):
-        try:
-            if message.from_user.id != config.OWNER_TG_ID: return
-            
-            users = db.get_all_accounts()
-            if not users:
-                _bot.reply_to(message, "📭 هیچ کاربری ثبت نشده.", 
-                            reply_markup=owner_users_keyboard())
-                return
-            
-            lines = [f"👥 <b>لیست کاربران ({len(users)} نفر):</b>\n"]
-            for u in users:
-                bal = db.get_token_balance(u['id'])
-                tg_id = db.get_telegram_id_by_owner(u['id'])
-                status = "✅" if tg_id else "❌"
-                lines.append(f"{status} {u['username']} — 💎{bal}")
-            
-            _bot.reply_to(message, "\n".join(lines), reply_markup=owner_users_keyboard())
-        except Exception as e:
-            logger.error(f"❌ خطا در cmd_list_users: {e}")
-
-    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "🎁 هدیه به کاربر")
-    def cmd_give_prompt(message):
-        try:
-            if message.from_user.id != config.OWNER_TG_ID: return
-            
-            msg = _bot.reply_to(message, 
-                "✏️ <b>فرمت:</b>\n"
-                "<code>/give username amount</code>\n\n"
-                "مثال: <code>/give amir 10</code>",
-                reply_markup=types.ReplyKeyboardMarkup(resize_keyboard=True).add("🔙 بازگشت"))
-            
-            _bot.register_next_step_handler(msg, process_give_tokens)
-        except Exception as e:
-            logger.error(f"❌ خطا در cmd_give_prompt: {e}")
-
-    def process_give_tokens(message):
-        try:
-            if message.text == "🔙 بازگشت":
-                _bot.reply_to(message, "🔙 بازگشت.", reply_markup=owner_keyboard())
+            replied = message.reply_to_message
+            if not replied:
+                _bot.reply_to(message, 
+                    "❌ لطفاً روی پیام کاربر مورد نظر ریپلای کنید.\n"
+                    "فرمت: <code>انتقال [مقدار]</code>\n"
+                    "مثال: <code>انتقال 100</code>")
                 return
             
             parts = message.text.strip().split()
-            if len(parts) < 3:
-                _bot.reply_to(message, "❌ فرمت: /give username amount", 
-                            reply_markup=owner_users_keyboard())
+            if len(parts) < 2:
+                _bot.reply_to(message, 
+                    "❌ فرمت صحیح:\n"
+                    "<code>انتقال [مقدار]</code>\n"
+                    "مثال: <code>انتقال 100</code>")
                 return
             
-            target = parts[1].lstrip("@")
             try:
-                amount = int(parts[2])
-            except:
-                _bot.reply_to(message, "❌ مقدار باید عدد باشد.", 
-                            reply_markup=owner_users_keyboard())
+                amount = int(parts[1])
+                if amount <= 0:
+                    _bot.reply_to(message, "❌ مقدار باید بیشتر از ۰ باشد.")
+                    return
+            except ValueError:
+                _bot.reply_to(message, "❌ مقدار باید عدد باشد.")
                 return
             
-            account = db.get_account_by_username(target)
-            if not account:
-                _bot.reply_to(message, f"❌ کاربر '{target}' یافت نشد.", 
-                            reply_markup=owner_users_keyboard())
+            from_tg_id = message.from_user.id
+            to_tg_id = replied.from_user.id
+            
+            if from_tg_id == to_tg_id:
+                _bot.reply_to(message, "❌ نمی‌توانید به خودتان الماس انتقال دهید.")
                 return
             
-            db.add_tokens(account["id"], amount)
-            new_balance = db.get_token_balance(account["id"])
+            from_account = db.get_account_by_tg_id(from_tg_id)
+            if not from_account:
+                _bot.reply_to(message, "❌ شما در پنل ثبت‌نام نکرده‌اید!\nلطفاً در ربات @Nexo55bot ثبت‌نام کنید.")
+                return
             
-            _bot.reply_to(message, 
-                f"✅ <b>{amount}</b> الماس به <b>{account['username']}</b> داده شد.\n"
-                f"💎 موجودی جدید: <b>{new_balance}</b>",
-                reply_markup=owner_users_keyboard())
+            balance = db.get_token_balance(from_account['id'])
+            if balance < amount:
+                _bot.reply_to(message, f"❌ موجودی ناکافی!\n💎 موجودی شما: {balance} الماس\n📊 نیاز: {amount} الماس")
+                return
             
-            tg_id = db.get_telegram_id_by_owner(account["id"])
-            if tg_id:
+            to_account = db.get_account_by_tg_id(to_tg_id)
+            if not to_account:
+                _bot.reply_to(message, "❌ کاربر مورد نظر در پنل ثبت‌نام نکرده است.")
+                return
+            
+            success = db.transfer_tokens(from_account['id'], to_tg_id, amount)
+            if success:
+                new_balance = db.get_token_balance(from_account['id'])
+                
+                _bot.reply_to(
+                    message,
+                    f"✅ **انتقال الماس انجام شد!**\n\n"
+                    f"👤 از: @{message.from_user.username or message.from_user.first_name}\n"
+                    f"👤 به: @{replied.from_user.username or replied.from_user.first_name}\n"
+                    f"💰 مقدار: <b>{amount}</b> الماس\n"
+                    f"💎 موجودی شما: <b>{new_balance}</b> الماس"
+                )
+                
                 try:
-                    _bot.send_message(tg_id, 
-                        f"🎁 <b>{amount}</b> الماس از طرف مالک دریافت کردید!\n"
-                        f"💎 موجودی جدید: <b>{new_balance}</b> الماس")
+                    _bot.send_message(
+                        to_tg_id,
+                        f"🎁 **دریافت الماس!**\n\n"
+                        f"👤 از: @{message.from_user.username or message.from_user.first_name}\n"
+                        f"💰 مقدار: <b>{amount}</b> الماس\n"
+                        f"💎 به حساب شما واریز شد!"
+                    )
                 except:
                     pass
+            else:
+                _bot.reply_to(message, "❌ خطا در انتقال الماس. لطفاً مجدداً تلاش کنید.")
+                
         except Exception as e:
-            logger.error(f"❌ خطا در process_give_tokens: {e}")
+            logger.error(f"❌ خطا در cmd_transfer: {e}")
+            _bot.reply_to(message, f"⚠️ خطا: {str(e)}")
+
+    # ─── ❌ نادیده گرفتن همه پیام‌های گروه ──────────────────────────────────────
+    @_bot.message_handler(func=lambda m: m.chat.type in ['group', 'supergroup'])
+    def ignore_group_messages(message):
+        pass
 
     # ─── پیام‌های ناشناخته (فقط پیوی) ──────────────────────────────────────────
     @_bot.message_handler(func=lambda m: m.chat.type == 'private')
@@ -2261,6 +2175,9 @@ def start_token_bot():
                          reply_markup=owner_keyboard() if is_owner else user_keyboard())
         except Exception as e:
             logger.error(f"❌ خطا در cmd_unknown_private: {e}")
+
+    # ─── شروع تایمر پاک‌سازی ──────────────────────────────────────────────────
+    start_cleanup_timer()
 
     # ─── حلقه Polling ──────────────────────────────────────────────────────
     def _polling_loop():
