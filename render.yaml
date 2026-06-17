@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: amel-self55
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
+    envVars:
+      - key: API_ID
+        sync: false
+      - key: API_HASH
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: BOT_TOKEN
+        sync: false
+      - key: OWNER_TG_ID
+        value: "8296865861"
+      - key: OWNER_USERNAME
+        value: "amele55"
+      - key: OWNER_PHONE
+        sync: false
+      - key: SITE_URL
+        sync: false
+      - key: PORT
+        value: "10000"
