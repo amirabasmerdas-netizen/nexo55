@@ -867,7 +867,7 @@ code { background: var(--bg3); padding: 2px 8px; border-radius: 4px; font-family
   .dc-btn { font-size: 13px; padding: 9px 10px; }
   .dc-btn-full { font-size: 13px; padding: 9px 10px; }
 
-  /* توکن کارت روی موبایل */
+  /* الماس کارت روی موبایل */
   .dc-token-stats { gap: 10px; }
   .dc-token-stat { padding: 10px 16px; min-width: 90px; }
   .dc-token-big { font-size: 30px; }
@@ -893,7 +893,7 @@ code { background: var(--bg3); padding: 2px 8px; border-radius: 4px; font-family
   .dc-token-actions .dc-btn-full { min-width: unset; }
 }
 
-/* ─── سیستم توکن ─── */
+/* ─── سیستم الماس ─── */
 .ph-tokens {
   display: flex;
   align-items: center;
