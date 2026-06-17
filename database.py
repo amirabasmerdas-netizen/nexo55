@@ -5,6 +5,7 @@ from typing import Optional, Dict, List, Any
 
 # ─── ایمپورت از دیتابیس اصلی (Supabase) ──────────────────────────────────────
 from database_supabase import (
+    # حساب‌ها
     create_account as supa_create_account,
     verify_account as supa_verify_account,
     get_account as supa_get_account,
@@ -14,18 +15,22 @@ from database_supabase import (
     account_exists as supa_account_exists,
     save_telegram_user_id as supa_save_telegram_user_id,
     get_telegram_id_by_owner as supa_get_telegram_id_by_owner,
+    # تنظیمات
     get_setting as supa_get_setting,
     set_setting as supa_set_setting,
     toggle_setting as supa_toggle_setting,
     get_all_logged_in_users as supa_get_all_logged_in_users,
     init_user_settings as supa_init_user_settings,
+    # توکن
     get_token_balance as supa_get_token_balance,
     add_tokens as supa_add_tokens,
     deduct_tokens as supa_deduct_tokens,
     claim_daily_token as supa_claim_daily_token,
     get_token_stats as supa_get_token_stats,
+    # رفرال
     process_referral as supa_process_referral,
     get_referral_count as supa_get_referral_count,
+    # پیام
     save_message_slot as supa_save_message_slot,
     get_message_slot as supa_get_message_slot,
     add_scheduled_message as supa_add_scheduled_message,
@@ -33,6 +38,17 @@ from database_supabase import (
     mark_scheduled_sent as supa_mark_scheduled_sent,
     log_deleted_message as supa_log_deleted_message,
     get_deleted_messages as supa_get_deleted_messages,
+    # چالش‌ها
+    create_math_challenge as supa_create_math_challenge,
+    get_math_challenge as supa_get_math_challenge,
+    solve_math_challenge as supa_solve_math_challenge,
+    create_worldcup_bet as supa_create_worldcup_bet,
+    get_active_worldcup_bet as supa_get_active_worldcup_bet,
+    place_bet as supa_place_bet,
+    get_bet_users as supa_get_bet_users,
+    finish_worldcup_bet as supa_finish_worldcup_bet,
+    get_challenge_settings as supa_get_challenge_settings,
+    update_challenge_settings as supa_update_challenge_settings,
     SETTING_DEFAULTS,
     _hash_pw,
 )
@@ -198,48 +214,35 @@ def remove_forced_channel(username: str) -> bool:
 def check_user_membership(bot, user_id: int) -> tuple:
     return cache.check_user_membership(bot, user_id)
 
-# ─── توابع چالش ──────────────────────────────────────────────────────────────
-from database_supabase import (
-    create_math_challenge as supa_create_math_challenge,
-    get_math_challenge as supa_get_math_challenge,
-    solve_math_challenge as supa_solve_math_challenge,
-    create_worldcup_bet as supa_create_worldcup_bet,
-    get_active_worldcup_bet as supa_get_active_worldcup_bet,
-    place_bet as supa_place_bet,
-    get_bet_users as supa_get_bet_users,
-    finish_worldcup_bet as supa_finish_worldcup_bet,
-    get_challenge_settings as supa_get_challenge_settings,
-    update_challenge_settings as supa_update_challenge_settings,
-)
-
-def create_math_challenge(owner_id, challenge_text, correct_answer, chat_id, message_id=None):
+# ─── ✅ توابع چالش ─────────────────────────────────────────────────────────────
+def create_math_challenge(owner_id: int, challenge_text: str, correct_answer: str, chat_id: int, message_id: int = None):
     return supa_create_math_challenge(owner_id, challenge_text, correct_answer, chat_id, message_id)
 
-def get_math_challenge(owner_id):
+def get_math_challenge(owner_id: int):
     return supa_get_math_challenge(owner_id)
 
-def solve_math_challenge(challenge_id):
+def solve_math_challenge(challenge_id: int):
     return supa_solve_math_challenge(challenge_id)
 
-def create_worldcup_bet(owner_id, team1, team2, match_time, photo_url=None):
-    return supa_create_worldcup_bet(owner_id, team1, team2, match_time, photo_url)
+def create_worldcup_bet(owner_id: int, team1: str, team2: str, match_time: str, photo_file_id: str = None):
+    return supa_create_worldcup_bet(owner_id, team1, team2, match_time, photo_file_id)
 
-def get_active_worldcup_bet(owner_id):
+def get_active_worldcup_bet(owner_id: int):
     return supa_get_active_worldcup_bet(owner_id)
 
-def place_bet(bet_id, user_tg_id, selected_team, bet_amount):
+def place_bet(bet_id: int, user_tg_id: int, selected_team: str, bet_amount: int):
     return supa_place_bet(bet_id, user_tg_id, selected_team, bet_amount)
 
-def get_bet_users(bet_id):
+def get_bet_users(bet_id: int):
     return supa_get_bet_users(bet_id)
 
-def finish_worldcup_bet(bet_id, winner):
+def finish_worldcup_bet(bet_id: int, winner: str):
     return supa_finish_worldcup_bet(bet_id, winner)
 
-def get_challenge_settings(owner_id):
+def get_challenge_settings(owner_id: int):
     return supa_get_challenge_settings(owner_id)
 
-def update_challenge_settings(owner_id, key, value):
+def update_challenge_settings(owner_id: int, key: str, value):
     return supa_update_challenge_settings(owner_id, key, value)
 
 # ─── صادرات ────────────────────────────────────────────────────────────────────
@@ -276,4 +279,10 @@ __all__ = [
     
     # چنل‌های اجباری
     'get_forced_channels', 'add_forced_channel', 'remove_forced_channel', 'check_user_membership',
+    
+    # چالش‌ها
+    'create_math_challenge', 'get_math_challenge', 'solve_math_challenge',
+    'create_worldcup_bet', 'get_active_worldcup_bet', 'place_bet',
+    'get_bet_users', 'finish_worldcup_bet',
+    'get_challenge_settings', 'update_challenge_settings',
 ]
