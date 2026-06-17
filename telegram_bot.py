@@ -13,15 +13,29 @@ OWNER_TG_ID = config.OWNER_TG_ID
 # ─── کش کاربران ──────────────────────────────────────────────────────────────
 _user_cache = {}
 _user_cache_time = {}
+_CACHE_TTL = 5  # کش 5 ثانیه برای جلوگیری از کش قدیمی
 
 def get_user_account(tg_id: int):
-    """دریافت حساب کاربر - مستقیم از دیتابیس دائمی (Supabase) بدون کش"""
+    """
+    دریافت حساب کاربر - از دیتابیس دائمی (Supabase) با کش 5 ثانیه
+    برای اینکه کاربر بعد از ثبت‌نام سریعاً شناسایی بشه
+    """
+    now = datetime.datetime.now().timestamp()
+    
+    # بررسی کش با TTL کوتاه
+    if tg_id in _user_cache:
+        if now - _user_cache_time.get(tg_id, 0) < _CACHE_TTL:
+            return _user_cache[tg_id]
+    
+    # دریافت از دیتابیس دائمی
     account = db.get_account_by_tg_id(tg_id)
+    _user_cache[tg_id] = account
+    _user_cache_time[tg_id] = now
     print(f"🔍 جستجوی کاربر {tg_id} در دیتابیس: {account}")
     return account
 
 def clear_user_cache(tg_id: int = None):
-    """پاک کردن کش کاربر"""
+    """پاک کردن کش کاربر (بعد از ثبت‌نام یا لاگین)"""
     if tg_id:
         _user_cache.pop(tg_id, None)
         _user_cache_time.pop(tg_id, None)
@@ -30,14 +44,24 @@ def clear_user_cache(tg_id: int = None):
         _user_cache_time.clear()
     print("✅ کش کاربران پاک شد")
 
-# ─── کش برای کاهش کوئری ──────────────────────────────────────────────────────
+# ─── کش تنظیمات ──────────────────────────────────────────────────────────────
 _user_settings_cache = {}
 _cache_timestamps = {}
 
 def get_cached_setting(owner_id: int, key: str, default=None):
-    """دریافت تنظیمات - مستقیم از دیتابیس دائمی (Supabase) بدون کش"""
+    """
+    دریافت تنظیمات - از دیتابیس دائمی (Supabase) با کش 5 ثانیه
+    """
+    cache_key = f"{owner_id}:{key}"
+    now = datetime.datetime.now().timestamp()
+    
+    if cache_key in _user_settings_cache:
+        if now - _cache_timestamps.get(cache_key, 0) < _CACHE_TTL:
+            return _user_settings_cache[cache_key]
+    
     value = db.get_setting(owner_id, key, default)
-    print(f"🔍 دریافت تنظیمات {key} برای کاربر {owner_id}: {value}")
+    _user_settings_cache[cache_key] = value
+    _cache_timestamps[cache_key] = now
     return value
 
 def clear_settings_cache():
@@ -52,16 +76,23 @@ def get_bot():
 def start_token_bot():
     global _bot, BOT_USERNAME
 
-    # ✅ تست اتصال به دیتابیس
+    # ✅ تست اتصال به دیتابیس دائمی
     try:
         test = db.get_all_accounts()
-        print(f"✅ اتصال به دیتابیس برقرار است! تعداد کاربران: {len(test)}")
+        print(f"✅ اتصال به دیتابیس دائمی (Supabase) برقرار است! تعداد کاربران: {len(test)}")
     except Exception as e:
-        print(f"❌ خطا در اتصال به دیتابیس: {e}")
+        print(f"❌ خطا در اتصال به دیتابیس دائمی: {e}")
         return
 
+    # ✅ تست اتصال به دیتابیس موقت
+    try:
+        channels = cache.get_forced_channels()
+        print(f"✅ اتصال به دیتابیس موقت (SQLite) برقرار است! تعداد چنل‌ها: {len(channels)}")
+    except Exception as e:
+        print(f"❌ خطا در اتصال به دیتابیس موقت: {e}")
+
     if not config.BOT_TOKEN:
-        print("⚠️ BOT_TOKEN تنظیم نشده — ربات توکن غیرفعال است")
+        print("⚠️ BOT_TOKEN تنظیم نشده — ربات مدیریت غیرفعال است")
         return
 
     _bot = telebot.TeleBot(config.BOT_TOKEN, parse_mode="HTML", threaded=False)
@@ -86,11 +117,11 @@ def start_token_bot():
 
     # ─── توابع کمکی ──────────────────────────────────────────────────────────
     def get_user_stats(owner_id: int):
-        """دریافت آمار کاربر"""
+        """دریافت آمار کاربر از دیتابیس دائمی"""
         return db.get_token_stats(owner_id)
 
     def get_user_settings(owner_id: int):
-        """دریافت تنظیمات کاربر"""
+        """دریافت تنظیمات کاربر از دیتابیس دائمی"""
         keys = [
             "self_bot_active", "secretary_active", "anti_delete_active",
             "anti_link_active", "auto_seen_active", "auto_reaction_active",
@@ -99,9 +130,12 @@ def start_token_bot():
         ]
         return {k: get_cached_setting(owner_id, k, "0") for k in keys}
 
-    # ─── بررسی عضویت در چنل‌های اجباری ──────────────────────────────────────
+    # ─── بررسی عضویت در چنل‌های اجباری (از دیتابیس موقت) ──────────────────
     def require_membership(message):
-        """بررسی عضویت کاربر در چنل‌های اجباری"""
+        """
+        بررسی عضویت کاربر در چنل‌های اجباری
+        ✅ از دیتابیس موقت (db_cache) استفاده میکنه
+        """
         tg_id = message.from_user.id
         is_member, missing = cache.check_user_membership(_bot, tg_id)
         if not is_member:
@@ -236,18 +270,18 @@ def start_token_bot():
                 except:
                     pass
 
-            # ۲. بررسی عضویت در کانال‌ها
+            # ۲. بررسی عضویت در چنل‌های اجباری (از دیتابیس موقت)
             if not require_membership(message):
                 return
 
-            # ۳. بررسی کامل حساب کاربری
+            # ۳. بررسی حساب کاربری (از دیتابیس دائمی)
             account = get_user_account(tg_id)
             print(f"👤 حساب کاربری پیدا شده: {account}")
             site_url = getattr(config, "SITE_URL", "")
 
             # ❌ اگر حساب وجود نداشت
             if not account:
-                print(f"❌ کاربر {tg_id} در دیتابیس پیدا نشد")
+                print(f"❌ کاربر {tg_id} در دیتابیس دائمی پیدا نشد")
                 markup = types.InlineKeyboardMarkup()
                 if site_url:
                     markup.add(types.InlineKeyboardButton("🌐 ثبت‌نام در پنل", url=site_url))
@@ -320,7 +354,7 @@ def start_token_bot():
             except:
                 pass
 
-    # ─── دکمه بررسی عضویت ──────────────────────────────────────────────────
+    # ─── دکمه بررسی عضویت (از دیتابیس موقت) ──────────────────────────────
     @_bot.callback_query_handler(func=lambda call: call.data == "check_join")
     def callback_check_join(call):
         try:
@@ -600,7 +634,7 @@ def start_token_bot():
         except Exception as e:
             print(f"❌ خطا در cmd_help: {e}")
 
-    # ─── تنظیمات سلف ────────────────────────────────────────────────────────
+    # ─── تنظیمات سلف (از دیتابیس دائمی) ────────────────────────────────────
     @_bot.message_handler(func=lambda m: m.text == "⚙️ تنظیمات سلف")
     def cmd_settings(message):
         try:
@@ -1418,6 +1452,7 @@ def start_token_bot():
         try:
             if message.from_user.id != config.OWNER_TG_ID: return
             
+            # ✅ از دیتابیس موقت (db_cache) برای چنل‌ها استفاده میکنه
             channels = cache.get_forced_channels()
             markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
             markup.add("➕ افزودن چنل", "❌ حذف چنل")
@@ -1454,6 +1489,7 @@ def start_token_bot():
                 return
             
             username = message.text.strip()
+            # ✅ از دیتابیس موقت (db_cache) استفاده میکنه
             if cache.add_forced_channel(username):
                 _bot.reply_to(message, f"✅ چنل {username} اضافه شد!", 
                             reply_markup=owner_keyboard())
@@ -1468,6 +1504,7 @@ def start_token_bot():
         try:
             if message.from_user.id != config.OWNER_TG_ID: return
             
+            # ✅ از دیتابیس موقت (db_cache) استفاده میکنه
             channels = cache.get_forced_channels()
             if not channels:
                 _bot.reply_to(message, "📭 لیست چنل‌ها خالی است.", reply_markup=owner_keyboard())
@@ -1490,6 +1527,7 @@ def start_token_bot():
             if message.from_user.id != config.OWNER_TG_ID: return
             
             username = message.text.replace("🗑️ ", "")
+            # ✅ از دیتابیس موقت (db_cache) استفاده میکنه
             if cache.remove_forced_channel(username):
                 _bot.reply_to(message, f"✅ چنل {username} حذف شد!", 
                             reply_markup=owner_keyboard())
@@ -1504,6 +1542,7 @@ def start_token_bot():
         try:
             if message.from_user.id != config.OWNER_TG_ID: return
             
+            # ✅ از دیتابیس موقت (db_cache) استفاده میکنه
             channels = cache.get_forced_channels()
             if not channels:
                 _bot.reply_to(message, "📭 لیست چنل‌ها خالی است.", 
@@ -1523,6 +1562,7 @@ def start_token_bot():
         try:
             if message.from_user.id != config.OWNER_TG_ID: return
             
+            # ✅ از دیتابیس دائمی (Supabase) استفاده میکنه
             users = db.get_all_accounts()
             
             text = f"👥 <b>مدیریت کاربران</b>\n\n"
@@ -1544,6 +1584,7 @@ def start_token_bot():
         try:
             if message.from_user.id != config.OWNER_TG_ID: return
             
+            # ✅ از دیتابیس دائمی (Supabase) استفاده میکنه
             users = db.get_all_accounts()
             if not users:
                 _bot.reply_to(message, "📭 هیچ کاربری ثبت نشده.", 
@@ -1596,6 +1637,7 @@ def start_token_bot():
                             reply_markup=owner_users_keyboard())
                 return
             
+            # ✅ از دیتابیس دائمی (Supabase) استفاده میکنه
             account = db.get_account_by_username(target)
             if not account:
                 _bot.reply_to(message, f"❌ کاربر '{target}' یافت نشد.", 
