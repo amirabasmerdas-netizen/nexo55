@@ -149,16 +149,45 @@ class BotManager:
                     await asyncio.sleep(10)
                     continue
 
+                # ✅ ایجاد کلاینت با تنظیمات timeout بیشتر
                 cl = TelegramClient(
                     StringSession(session_data),
                     config.API_ID,
                     config.API_HASH,
+                    connection_retries=5,
+                    retry_delay=3,
+                    timeout=30,
                 )
                 entry["client"] = cl
                 _register_handlers(cl, owner_id, entry)
 
-                await cl.start()
+                # ✅ اتصال با تنظیمات بهتر
+                try:
+                    await cl.connect()
+                    if not cl.is_connected():
+                        print(f"⚠️ [{owner_id}] اتصال برقرار نشد، تلاش مجدد...")
+                        await asyncio.sleep(5)
+                        continue
+                    
+                    # ✅ شروع با phone=None برای جلوگیری از درخواست ورودی
+                    await cl.start(phone=lambda: None, bot_token=lambda: None)
+                    
+                except Exception as e:
+                    print(f"❌ [{owner_id}] خطا در اتصال: {e}")
+                    # اگر session خراب است، آن را پاک کن
+                    if "invalid" in str(e).lower() or "auth" in str(e).lower():
+                        db.set_setting(owner_id, "session_data", "")
+                        db.set_setting(owner_id, "logged_in", "0")
+                        print(f"🔄 [{owner_id}] Session خراب است، پاک شد. لطفاً دوباره لاگین کنید.")
+                    await asyncio.sleep(10)
+                    continue
+                    
                 me = await cl.get_me()
+                if not me:
+                    print(f"❌ [{owner_id}] نمی‌توان اطلاعات کاربر را دریافت کرد")
+                    await asyncio.sleep(5)
+                    continue
+                    
                 print(f"✅ [{owner_id}] بات راه‌اندازی شد — {me.first_name} (@{me.username})")
 
                 db.save_telegram_user_id(owner_id, me.id)
@@ -186,7 +215,6 @@ class BotManager:
                 clock_task = asyncio.ensure_future(_clock_loop(cl, owner_id))
                 sched_task = asyncio.ensure_future(_scheduler_loop(cl, owner_id))
                 
-                # استارت چالش ریاضی (فقط برای مالک)
                 math_task = None
                 if owner_id == 1 or is_now_owner:
                     math_task = asyncio.ensure_future(_math_challenge_loop(cl, owner_id))
@@ -285,6 +313,9 @@ def _register_handlers(cl: TelegramClient, owner_id: int, entry: dict):
                     ))
                 except Exception as e:
                     print(f"⚠️ خطا در ری‌اکشن گروه: {e}")
+            
+            # ❌ پاسخ به دستور "موجودی" در گروه حذف شد - فقط ربات مدیریت پاسخ میدهد
+            return
 
         if db.is_silent_chat(owner_id, chat_id) or db.is_silent_user(owner_id, sender_id):
             return
@@ -440,7 +471,6 @@ def _register_handlers(cl: TelegramClient, owner_id: int, entry: dict):
             "وضعیت", "راهنما", "help",
             "حذف بعد ",
             "توقف سیو",
-            "موجودی",
         ]
 
         is_config_command = any(text.startswith(cmd) or text == cmd for cmd in config_commands)
