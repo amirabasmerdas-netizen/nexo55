@@ -198,8 +198,9 @@ body {
   position: fixed;
   top: 0; right: 0; bottom: 0;
   z-index: 100;
-  transition: transform 0.3s;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   overflow-y: auto;
+  box-shadow: none;
 }
 
 .sb-brand {
@@ -513,6 +514,7 @@ body {
   padding: 1px 8px;
   font-size: 10px;
   font-weight: 700;
+  display: inline-block;
 }
 .dc-badge-green { background: rgba(29,185,84,0.2); color: #69f0ae; }
 
@@ -858,7 +860,6 @@ code { background: var(--bg3); padding: 2px 8px; border-radius: 4px; font-family
     display: flex; 
   }
 
-  /* سایدبار: بیرون از صفحه، با کشیدن باز میشه */
   .sidebar {
     transform: translateX(100%);
     width: 85vw;
@@ -871,18 +872,15 @@ code { background: var(--bg3); padding: 2px 8px; border-radius: 4px; font-family
     transform: translateX(0);
   }
 
-  /* محتوا: کل عرض صفحه */
   .main-area { 
     margin-right: 0;
     width: 100%;
   }
 
-  /* هدر بزرگ روی موبایل مخفی می‌شه */
   .panel-header { 
     display: none; 
   }
 
-  /* سکشن‌ها padding کمتر */
   .section { 
     padding: 12px 10px; 
   }
@@ -891,13 +889,11 @@ code { background: var(--bg3); padding: 2px 8px; border-radius: 4px; font-family
     font-size: 16px; 
   }
 
-  /* گرید داشبورد: یک ستون */
   .dash-grid { 
     grid-template-columns: 1fr; 
     gap: 10px; 
   }
 
-  /* کارت‌های داشبورد */
   .dash-card .dc-body { 
     padding: 10px; 
   }
@@ -918,7 +914,6 @@ code { background: var(--bg3); padding: 2px 8px; border-radius: 4px; font-family
     font-size: 13px;
   }
 
-  /* الماس کارت روی موبایل */
   .dc-token-stats { 
     gap: 8px; 
     flex-wrap: wrap;
@@ -944,7 +939,6 @@ code { background: var(--bg3); padding: 2px 8px; border-radius: 4px; font-family
     font-size: 14px;
   }
 
-  /* فرم‌ها */
   .input-row { 
     flex-direction: column; 
     gap: 8px;
@@ -961,7 +955,6 @@ code { background: var(--bg3); padding: 2px 8px; border-radius: 4px; font-family
     justify-content: center;
   }
 
-  /* auth pages */
   .auth-card { 
     padding: 20px 16px; 
   }
@@ -979,13 +972,11 @@ code { background: var(--bg3); padding: 2px 8px; border-radius: 4px; font-family
     min-height: 48px;
   }
 
-  /* دکمه‌های فوتر */
   .sb-logout {
     min-height: 44px;
     font-size: 14px;
   }
   
-  /* تاگل سوئیچ بزرگتر برای لمس */
   .tgl { 
     width: 48px; 
     height: 26px; 
@@ -1001,7 +992,6 @@ code { background: var(--bg3); padding: 2px 8px; border-radius: 4px; font-family
     right: auto;
   }
 
-  /* تب‌ها */
   .tabs-bar {
     flex-wrap: wrap;
   }
@@ -1012,7 +1002,6 @@ code { background: var(--bg3); padding: 2px 8px; border-radius: 4px; font-family
     font-size: 14px;
   }
 
-  /* دکمه‌های کارت */
   .dc-btn-row {
     flex-direction: column;
     gap: 6px;
@@ -1021,12 +1010,23 @@ code { background: var(--bg3); padding: 2px 8px; border-radius: 4px; font-family
     width: 100%;
   }
 
-  /* دکمه‌های مدیریت */
   .btn-pri, .btn-dng {
     padding: 10px 16px;
     min-height: 44px;
     justify-content: center;
     font-size: 14px;
+  }
+  
+  .ph-tokens {
+    padding: 4px 10px;
+    font-size: 12px;
+  }
+  .ph-token-num {
+    font-size: 16px;
+    min-width: 20px;
+  }
+  .ph-token-label {
+    font-size: 10px;
   }
 }
 
@@ -1038,6 +1038,109 @@ code { background: var(--bg3); padding: 2px 8px; border-radius: 4px; font-family
   .dc-token-actions .dc-btn-full { min-width: unset; }
   .auth-card { padding: 16px 12px; }
   .auth-title { font-size: 20px; }
-  .ph-tokens { padding: 4px 10px; }
-  .ph-token-num { font-size: 16px; }
 }
+
+/* ─── سیستم الماس ─── */
+.ph-tokens {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(234,179,8,0.12);
+  border: 1px solid rgba(234,179,8,0.3);
+  border-radius: 10px;
+  padding: 6px 14px;
+  white-space: nowrap;
+}
+.ph-token-icon { font-size: 18px; }
+.ph-token-num {
+  font-size: 20px;
+  font-weight: 800;
+  color: #facc15;
+  min-width: 28px;
+  text-align: center;
+}
+.ph-token-label { font-size: 12px; color: #a0890a; font-weight: 600; }
+
+.dc-token-card {
+  grid-column: 1 / -1;
+  background: linear-gradient(135deg, #1a1600 0%, #0f1a0a 50%, #0a0f1a 100%);
+  border-color: rgba(234,179,8,0.2);
+}
+.dc-header-gold {
+  background: linear-gradient(135deg, rgba(234,179,8,0.15), rgba(16,185,129,0.1));
+  border-bottom-color: rgba(234,179,8,0.2);
+  color: #facc15;
+}
+.dc-token-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.dc-token-stats {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.dc-token-stat {
+  text-align: center;
+  padding: 12px 24px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+  min-width: 120px;
+}
+.dc-token-big {
+  font-size: 40px;
+  font-weight: 900;
+  color: #facc15;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.dc-token-med {
+  font-size: 28px;
+  font-weight: 800;
+  color: #a78bfa;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.dc-token-sub {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 500;
+}
+.dc-token-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.dc-token-actions .dc-btn-full { flex: 1; min-width: 140px; }
+.dc-gold {
+  background: linear-gradient(135deg, #92400e, #78350f);
+  color: #fbbf24;
+  border: 1px solid rgba(251,191,36,0.3);
+}
+.dc-gold:hover { background: linear-gradient(135deg, #b45309, #92400e); }
+.dc-cyan {
+  background: linear-gradient(135deg, #0e4d5a, #083344);
+  color: #67e8f9;
+  border: 1px solid rgba(103,232,249,0.3);
+}
+.dc-cyan:hover { background: linear-gradient(135deg, #155e75, #0e4d5a); }
+.dc-purple {
+  background: linear-gradient(135deg, #4c1d95, #3b0764);
+  color: #c4b5fd;
+  border: 1px solid rgba(196,181,253,0.3);
+}
+.dc-purple:hover { background: linear-gradient(135deg, #5b21b6, #4c1d95); }
+.dc-token-info-bar {
+  font-size: 12px;
+  color: #6b7280;
+  text-align: center;
+  padding: 10px 16px;
+  background: rgba(255,255,255,0.02);
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.04);
+  line-height: 2;
+}
+.dc-token-info-bar b { color: #a78bfa; }
