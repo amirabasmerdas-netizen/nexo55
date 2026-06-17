@@ -57,7 +57,6 @@ def get_conn():
     try:
         conn = pool.getconn()
         conn.autocommit = True
-        # تنظیم timeout برای کوئری‌ها
         try:
             cur = conn.cursor()
             cur.execute("SET statement_timeout = '30s'")
@@ -84,17 +83,15 @@ def return_conn(conn):
 # ─── کش حافظه با TTL ──────────────────────────────────────────────────────────
 _cache = {}
 _cache_time = {}
-_CACHE_TTL = 60  # 60 ثانیه
+_CACHE_TTL = 60
 _cache_lock = threading.Lock()
 
 def clear_cache():
-    """پاک کردن کل کش"""
     with _cache_lock:
         _cache.clear()
         _cache_time.clear()
 
 def invalidate_cache(pattern: str = None):
-    """پاک کردن کش با الگو"""
     with _cache_lock:
         if pattern:
             keys_to_remove = [k for k in _cache.keys() if pattern in k]
@@ -106,19 +103,15 @@ def invalidate_cache(pattern: str = None):
             _cache_time.clear()
 
 def cached_query(key: str, query: str, params: tuple = None, fetch_one: bool = False, fetch_all: bool = False, ttl: int = 60):
-    """اجرای کوئری با کش حافظه"""
     now = time.time()
     cache_key = f"{key}:{str(params)}"
     
-    # بررسی کش
     with _cache_lock:
         if cache_key in _cache and (now - _cache_time.get(cache_key, 0) < ttl):
             return _cache[cache_key]
     
-    # اجرای کوئری
     result = execute_query(query, params, fetch_one, fetch_all)
     
-    # ذخیره در کش
     with _cache_lock:
         _cache[cache_key] = result
         _cache_time[cache_key] = now
@@ -126,7 +119,6 @@ def cached_query(key: str, query: str, params: tuple = None, fetch_one: bool = F
     return result
 
 def execute_query(query: str, params: tuple = None, fetch_one: bool = False, fetch_all: bool = False):
-    """اجرای کوئری با مدیریت خودکار اتصال"""
     conn = None
     cur = None
     try:
@@ -155,7 +147,6 @@ def execute_query(query: str, params: tuple = None, fetch_one: bool = False, fet
             return_conn(conn)
 
 def execute_batch(queries: List[tuple]) -> List[Any]:
-    """اجرای چندین کوئری به صورت دسته‌جمعی"""
     if not queries:
         return []
     
@@ -191,9 +182,6 @@ def _hash_pw(password: str) -> str:
 
 # ─── ایجاد جداول ──────────────────────────────────────────────────────────────
 def init_tables():
-    """ساخت جداول مورد نیاز در Supabase (فقط در صورت عدم وجود)"""
-    
-    # بررسی وجود جداول با یک کوئری
     try:
         result = execute_query(
             "SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename LIKE 'amel_%'",
@@ -332,7 +320,6 @@ def init_tables():
         """
     }
     
-    # فقط جدول‌هایی که وجود ندارند را ایجاد کن
     queries = []
     for table_name, create_query in tables.items():
         if table_name not in existing:
@@ -345,7 +332,6 @@ def init_tables():
             except Exception as e:
                 print(f"❌ Error creating table: {e}")
     
-    # ایجاد ایندکس‌ها (همیشه اجرا می‌شوند)
     indexes = [
         "CREATE INDEX IF NOT EXISTS idx_amel_accounts_telegram_user_id ON amel_accounts(telegram_user_id)",
         "CREATE INDEX IF NOT EXISTS idx_amel_settings_owner_id ON amel_settings(owner_id)",
@@ -887,6 +873,16 @@ def create_worldcup_bet(owner_id: int, team1: str, team2: str, match_time: str, 
         print(f"❌ create_worldcup_bet error: {e}")
         return None
 
+def update_challenge_message(challenge_id: int, message_id: int, chat_id: int):
+    try:
+        query = "UPDATE amel_worldcup_bets SET message_id = %s, chat_id = %s WHERE id = %s"
+        execute_query(query, (message_id, chat_id, challenge_id))
+        invalidate_cache("wc_bet_")
+        return True
+    except Exception as e:
+        print(f"❌ update_challenge_message error: {e}")
+        return False
+
 def get_active_worldcup_bet(owner_id: int):
     try:
         return cached_query(
@@ -963,16 +959,6 @@ def finish_worldcup_bet(bet_id: int, winner: str):
         return True
     except Exception as e:
         print(f"❌ finish_worldcup_bet error: {e}")
-        return False
-
-def update_challenge_message(challenge_id: int, message_id: int, chat_id: int):
-    try:
-        query = "UPDATE amel_worldcup_bets SET message_id = %s, chat_id = %s WHERE id = %s"
-        execute_query(query, (message_id, chat_id, challenge_id))
-        invalidate_cache("wc_bet_")
-        return True
-    except Exception as e:
-        print(f"❌ update_challenge_message error: {e}")
         return False
 
 def get_challenge_settings(owner_id: int):
