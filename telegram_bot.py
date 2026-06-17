@@ -22,7 +22,7 @@ OWNER_TG_ID = config.OWNER_TG_ID
 # ─── کش کاربران ──────────────────────────────────────────────────────────────
 _user_cache = {}
 _user_cache_time = {}
-_CACHE_TTL = 60  # افزایش به 60 ثانیه
+_CACHE_TTL = 60
 
 def get_user_account(tg_id: int):
     now = time.time()
@@ -115,7 +115,7 @@ def clean_expired_bets():
 def start_cleanup_timer():
     def cleanup_loop():
         while True:
-            time.sleep(300)  # ۵ دقیقه
+            time.sleep(300)
             try:
                 clean_expired_bets()
             except Exception as e:
@@ -194,7 +194,7 @@ def start_token_bot():
             reply_markup=markup
         )
 
-    # ─── ساخت کیبوردها (فقط برای پیوی) ──────────────────────────────────────
+    # ─── ساخت کیبوردها (مرتب‌شده) ──────────────────────────────────────────
     def user_keyboard():
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
         markup.add("💰 موجودی", "🎁 هدیه روزانه")
@@ -820,7 +820,6 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_security_menu: {e}")
 
-    # ─── دکمه‌های امنیت (فقط پیوی) ────────────────────────────────────────
     @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text.startswith("🛡️ ضد حذف"))
     def cmd_toggle_anti_delete(message):
         try:
@@ -919,7 +918,6 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_automation_menu: {e}")
 
-    # ─── دکمه‌های اتوماسیون (فقط پیوی) ────────────────────────────────────
     @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text.startswith("👁️ سین خودکار"))
     def cmd_toggle_auto_seen(message):
         try:
@@ -1617,6 +1615,10 @@ def start_token_bot():
                 return
             
             bet_id = db.create_worldcup_bet(1, team1, team2, match_time, photo_file_id)
+            if not bet_id:
+                _bot.reply_to(message, "❌ خطا در ایجاد چالش. لطفاً مجدداً تلاش کنید.", reply_markup=owner_keyboard())
+                return
+            
             logger.info(f"✅ چالش با ID {bet_id} در دیتابیس ثبت شد")
             
             markup = types.InlineKeyboardMarkup(row_width=2)
@@ -1650,8 +1652,11 @@ def start_token_bot():
                     sent = _bot.send_message(target_chat, caption, reply_markup=markup)
                 
                 if sent:
-                    db.update_challenge_message(bet_id, sent.message_id, sent.chat.id)
-                    logger.info(f"✅ پیام با موفقیت ارسال شد. Message ID: {sent.message_id}")
+                    try:
+                        db.update_challenge_message(bet_id, sent.message_id, sent.chat.id)
+                        logger.info(f"✅ پیام با موفقیت ارسال شد. Message ID: {sent.message_id}")
+                    except Exception as e:
+                        logger.error(f"❌ خطا در ذخیره message_id: {e}")
                 
             except Exception as e:
                 error_msg = str(e)
@@ -1695,10 +1700,19 @@ def start_token_bot():
                 _bot.answer_callback_query(call.id, "❌ لینک نامعتبر.", show_alert=True)
                 return
             
-            bet_id = int(parts[2])
+            try:
+                bet_id = int(parts[2])
+            except ValueError:
+                _bot.answer_callback_query(call.id, "❌ شناسه نامعتبر.", show_alert=True)
+                return
+            
             selected_team = parts[3]
             
-            bet = db.get_bet_game(bet_id)
+            # دریافت چالش از دیتابیس با message_id و chat_id
+            bet = db.get_worldcup_bet_by_message(call.message.message_id, call.message.chat.id)
+            if not bet:
+                bet = db.get_bet_game(bet_id)
+            
             if not bet:
                 _bot.answer_callback_query(call.id, "❌ این چالش منقضی شده است.", show_alert=True)
                 return
@@ -1714,7 +1728,7 @@ def start_token_bot():
                 _bot.answer_callback_query(call.id, "❌ ابتدا در پنل ثبت‌نام کنید.", show_alert=True)
                 return
             
-            _waiting_for_bet_amount[tg_id] = (bet_id, selected_team)
+            _waiting_for_bet_amount[tg_id] = (bet['id'], selected_team)
             
             msg = _bot.send_message(
                 call.message.chat.id,
@@ -1726,7 +1740,7 @@ def start_token_bot():
                 reply_to_message_id=call.message.message_id
             )
             
-            _bot.register_next_step_handler(msg, process_wc_bet_amount, bet_id, tg_id, selected_team)
+            _bot.register_next_step_handler(msg, process_wc_bet_amount, bet['id'], tg_id, selected_team)
             _bot.answer_callback_query(call.id, "✅ انتخاب ثبت شد!")
             
         except Exception as e:
