@@ -78,7 +78,7 @@ def init_tables():
             PRIMARY KEY (owner_id, key)
         )
         """,
-        # جدول توکن‌ها
+        # جدول توکن‌ها (الماس)
         """
         CREATE TABLE IF NOT EXISTS amel_tokens (
             owner_id INTEGER PRIMARY KEY,
@@ -418,7 +418,7 @@ def init_user_settings(owner_id: int):
         set_setting(owner_id, key, value)
     print(f"✅ تنظیمات کاربر {owner_id} مقداردهی شد")
 
-# ─── توکن‌ها ──────────────────────────────────────────────────────────────────
+# ─── توکن‌ها (الماس) ──────────────────────────────────────────────────────────
 def _init_tokens(owner_id: int):
     try:
         query = """
@@ -473,19 +473,26 @@ def claim_daily_token(owner_id: int):
     try:
         _init_tokens(owner_id)
         today = datetime.date.today()
+        today_str = today.isoformat()
         
         query = "SELECT last_daily FROM amel_tokens WHERE owner_id = %s"
         result = execute_query(query, (owner_id,), fetch_one=True)
         
-        if result and result.get('last_daily') == today.isoformat():
-            return False, "⏰ امروز قبلاً هدیه روزانه دریافت کردید."
+        # بررسی دقیق برای جلوگیری از دریافت تکراری
+        if result and result.get('last_daily'):
+            last_daily = result['last_daily']
+            # اگر last_daily از نوع date است، آن را به string تبدیل کن
+            if hasattr(last_daily, 'isoformat'):
+                last_daily = last_daily.isoformat()
+            if last_daily == today_str:
+                return False, "⏰ امروز قبلاً هدیه روزانه دریافت کردید."
         
         query = """
             UPDATE amel_tokens 
             SET balance = balance + %s, total_earned = total_earned + %s, last_daily = %s 
             WHERE owner_id = %s
         """
-        execute_query(query, (DAILY_TOKEN_GIFT, DAILY_TOKEN_GIFT, today.isoformat(), owner_id))
+        execute_query(query, (DAILY_TOKEN_GIFT, DAILY_TOKEN_GIFT, today_str, owner_id))
         return True, f"🎁 {DAILY_TOKEN_GIFT} الماس دریافت کردید!"
     except Exception as e:
         print(f"❌ claim_daily_token error: {e}")
@@ -498,11 +505,14 @@ def get_token_stats(owner_id: int) -> dict:
         result = execute_query(query, (owner_id,), fetch_one=True)
         if result:
             today = datetime.date.today().isoformat()
+            last_daily = result['last_daily']
+            if hasattr(last_daily, 'isoformat'):
+                last_daily = last_daily.isoformat()
             return {
                 "balance": result['balance'],
-                "last_daily": result['last_daily'],
+                "last_daily": last_daily,
                 "total_earned": result['total_earned'],
-                "can_claim_daily": result['last_daily'] != today,
+                "can_claim_daily": last_daily != today,
             }
     except Exception as e:
         print(f"❌ get_token_stats error: {e}")
@@ -512,21 +522,25 @@ def get_token_stats(owner_id: int) -> dict:
 def process_referral(referrer_owner_id: int, referred_tg_id: int) -> bool:
     from config import REFERRAL_TOKENS
     try:
+        # بررسی اینکه کاربر قبلاً معرفی شده یا نه
         query = "SELECT 1 FROM amel_referrals WHERE referred_tg_id = %s"
         if execute_query(query, (int(referred_tg_id),), fetch_one=True):
             print(f"❌ کاربر {referred_tg_id} قبلاً معرفی شده است")
             return False
         
+        # بررسی وجود معرف
         if not get_account(referrer_owner_id):
             print(f"❌ معرف با ID {referrer_owner_id} وجود ندارد")
             return False
         
+        # ثبت رفرال
         query = """
             INSERT INTO amel_referrals (referrer_owner_id, referred_tg_id, created_at) 
             VALUES (%s, %s, %s)
         """
         execute_query(query, (referrer_owner_id, int(referred_tg_id), datetime.datetime.now().isoformat()))
         
+        # اضافه کردن الماس به معرف
         add_tokens(referrer_owner_id, REFERRAL_TOKENS)
         print(f"✅ رفرال ثبت شد: {referrer_owner_id} -> {referred_tg_id}")
         return True
@@ -748,13 +762,16 @@ def get_challenge_settings(owner_id: int):
 
 def update_challenge_settings(owner_id: int, key: str, value):
     try:
-        query = """
-            INSERT INTO amel_challenge_settings (owner_id, updated_at) 
-            VALUES (%s, %s)
-            ON CONFLICT (owner_id) DO UPDATE 
-            SET {key} = %s, updated_at = %s
-        """.format(key=key)
-        execute_query(query, (owner_id, datetime.datetime.now().isoformat(), value, datetime.datetime.now().isoformat()))
+        # بررسی وجود رکورد
+        check_query = "SELECT 1 FROM amel_challenge_settings WHERE owner_id = %s"
+        exists = execute_query(check_query, (owner_id,), fetch_one=True)
+        
+        if exists:
+            query = f"UPDATE amel_challenge_settings SET {key} = %s, updated_at = %s WHERE owner_id = %s"
+            execute_query(query, (value, datetime.datetime.now().isoformat(), owner_id))
+        else:
+            query = f"INSERT INTO amel_challenge_settings (owner_id, {key}, updated_at) VALUES (%s, %s, %s)"
+            execute_query(query, (owner_id, value, datetime.datetime.now().isoformat()))
         return True
     except Exception as e:
         print(f"❌ update_challenge_settings error: {e}")
