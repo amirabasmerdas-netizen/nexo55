@@ -182,6 +182,21 @@ def init_tables():
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """,
+        # جدول شرط‌بندی دو نفره
+        """
+        CREATE TABLE IF NOT EXISTS amel_bet_games (
+            id SERIAL PRIMARY KEY,
+            owner_id INTEGER NOT NULL,
+            chat_id BIGINT NOT NULL,
+            message_id BIGINT,
+            player1_id BIGINT NOT NULL,
+            player2_id BIGINT,
+            bet_amount INTEGER NOT NULL,
+            winner_id BIGINT,
+            status TEXT DEFAULT 'waiting',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
         # ایندکس‌ها
         """
         CREATE INDEX IF NOT EXISTS idx_amel_accounts_telegram_user_id 
@@ -218,6 +233,10 @@ def init_tables():
         """
         CREATE INDEX IF NOT EXISTS idx_user_bets_bet 
         ON amel_user_bets(bet_id)
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_bet_games_chat_status 
+        ON amel_bet_games(chat_id, status)
         """,
     ]
     
@@ -478,10 +497,8 @@ def claim_daily_token(owner_id: int):
         query = "SELECT last_daily FROM amel_tokens WHERE owner_id = %s"
         result = execute_query(query, (owner_id,), fetch_one=True)
         
-        # بررسی دقیق برای جلوگیری از دریافت تکراری
         if result and result.get('last_daily'):
             last_daily = result['last_daily']
-            # اگر last_daily از نوع date است، آن را به string تبدیل کن
             if hasattr(last_daily, 'isoformat'):
                 last_daily = last_daily.isoformat()
             if last_daily == today_str:
@@ -522,25 +539,21 @@ def get_token_stats(owner_id: int) -> dict:
 def process_referral(referrer_owner_id: int, referred_tg_id: int) -> bool:
     from config import REFERRAL_TOKENS
     try:
-        # بررسی اینکه کاربر قبلاً معرفی شده یا نه
         query = "SELECT 1 FROM amel_referrals WHERE referred_tg_id = %s"
         if execute_query(query, (int(referred_tg_id),), fetch_one=True):
             print(f"❌ کاربر {referred_tg_id} قبلاً معرفی شده است")
             return False
         
-        # بررسی وجود معرف
         if not get_account(referrer_owner_id):
             print(f"❌ معرف با ID {referrer_owner_id} وجود ندارد")
             return False
         
-        # ثبت رفرال
         query = """
             INSERT INTO amel_referrals (referrer_owner_id, referred_tg_id, created_at) 
             VALUES (%s, %s, %s)
         """
         execute_query(query, (referrer_owner_id, int(referred_tg_id), datetime.datetime.now().isoformat()))
         
-        # اضافه کردن الماس به معرف
         add_tokens(referrer_owner_id, REFERRAL_TOKENS)
         print(f"✅ رفرال ثبت شد: {referrer_owner_id} -> {referred_tg_id}")
         return True
@@ -762,7 +775,6 @@ def get_challenge_settings(owner_id: int):
 
 def update_challenge_settings(owner_id: int, key: str, value):
     try:
-        # بررسی وجود رکورد
         check_query = "SELECT 1 FROM amel_challenge_settings WHERE owner_id = %s"
         exists = execute_query(check_query, (owner_id,), fetch_one=True)
         
@@ -776,6 +788,56 @@ def update_challenge_settings(owner_id: int, key: str, value):
     except Exception as e:
         print(f"❌ update_challenge_settings error: {e}")
         return False
+
+# ─── شرط‌بندی دو نفره ──────────────────────────────────────────────────────────
+def create_bet_game(owner_id: int, chat_id: int, player1_id: int, bet_amount: int, message_id: int = None):
+    try:
+        query = """
+            INSERT INTO amel_bet_games (owner_id, chat_id, player1_id, bet_amount, message_id, status, created_at)
+            VALUES (%s, %s, %s, %s, %s, 'waiting', %s)
+            RETURNING id
+        """
+        result = execute_query(query, (owner_id, chat_id, player1_id, bet_amount, message_id, datetime.datetime.now().isoformat()), fetch_one=True)
+        return result['id'] if result else None
+    except Exception as e:
+        print(f"❌ create_bet_game error: {e}")
+        return None
+
+def join_bet_game(game_id: int, player2_id: int):
+    try:
+        query = "UPDATE amel_bet_games SET player2_id = %s, status = 'active' WHERE id = %s AND status = 'waiting'"
+        execute_query(query, (player2_id, game_id))
+        return True
+    except Exception as e:
+        print(f"❌ join_bet_game error: {e}")
+        return False
+
+def get_active_bet_game(chat_id: int):
+    try:
+        query = "SELECT * FROM amel_bet_games WHERE chat_id = %s AND status IN ('waiting', 'active') ORDER BY created_at DESC LIMIT 1"
+        result = execute_query(query, (chat_id,), fetch_one=True)
+        return result if result else None
+    except Exception as e:
+        print(f"❌ get_active_bet_game error: {e}")
+        return None
+
+def finish_bet_game(game_id: int, winner_id: int):
+    try:
+        query = "UPDATE amel_bet_games SET winner_id = %s, status = 'finished' WHERE id = %s"
+        execute_query(query, (winner_id, game_id))
+        return True
+    except Exception as e:
+        print(f"❌ finish_bet_game error: {e}")
+        return False
+
+def get_bet_game(game_id: int):
+    try:
+        query = "SELECT * FROM amel_bet_games WHERE id = %s"
+        result = execute_query(query, (game_id,), fetch_one=True)
+        return result if result else None
+    except Exception as e:
+        print(f"❌ get_bet_game error: {e}")
+        return None
 
 # ─── مقداردهی اولیه ──────────────────────────────────────────────────────────
 try:
