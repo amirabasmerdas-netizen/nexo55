@@ -586,3 +586,129 @@ except Exception as e:
     print(f"❌ خطا در ایجاد جداول: {e}")
 
 print("✅ database_supabase.py بارگذاری شد!")
+
+# ─── چالش‌های ریاضی ──────────────────────────────────────────────────────────
+def create_math_challenge(owner_id: int, challenge_text: str, correct_answer: str, chat_id: int, message_id: int = None):
+    try:
+        query = """
+            INSERT INTO amel_math_challenges (owner_id, challenge_text, correct_answer, chat_id, message_id, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """
+        result = execute_query(query, (owner_id, challenge_text, correct_answer, chat_id, message_id, datetime.datetime.now().isoformat()), fetch_one=True)
+        return result['id'] if result else None
+    except Exception as e:
+        print(f"❌ create_math_challenge error: {e}")
+        return None
+
+def get_math_challenge(owner_id: int):
+    try:
+        query = """
+            SELECT * FROM amel_math_challenges 
+            WHERE owner_id = %s AND solved = FALSE 
+            ORDER BY created_at DESC LIMIT 1
+        """
+        result = execute_query(query, (owner_id,), fetch_one=True)
+        return result if result else None
+    except Exception as e:
+        print(f"❌ get_math_challenge error: {e}")
+        return None
+
+def solve_math_challenge(challenge_id: int):
+    try:
+        query = "UPDATE amel_math_challenges SET solved = TRUE WHERE id = %s"
+        execute_query(query, (challenge_id,))
+        return True
+    except Exception as e:
+        print(f"❌ solve_math_challenge error: {e}")
+        return False
+
+# ─── چالش جام جهانی ──────────────────────────────────────────────────────────
+def create_worldcup_bet(owner_id: int, team1: str, team2: str, match_time: str, photo_url: str = None):
+    try:
+        query = """
+            INSERT INTO amel_worldcup_bets (owner_id, team1, team2, match_time, photo_url, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """
+        result = execute_query(query, (owner_id, team1, team2, match_time, photo_url, datetime.datetime.now().isoformat()), fetch_one=True)
+        return result['id'] if result else None
+    except Exception as e:
+        print(f"❌ create_worldcup_bet error: {e}")
+        return None
+
+def get_active_worldcup_bet(owner_id: int):
+    try:
+        query = """
+            SELECT * FROM amel_worldcup_bets 
+            WHERE owner_id = %s AND is_finished = FALSE 
+            ORDER BY created_at DESC LIMIT 1
+        """
+        result = execute_query(query, (owner_id,), fetch_one=True)
+        return result if result else None
+    except Exception as e:
+        print(f"❌ get_active_worldcup_bet error: {e}")
+        return None
+
+def place_bet(bet_id: int, user_tg_id: int, selected_team: str, bet_amount: int):
+    try:
+        query = """
+            INSERT INTO amel_user_bets (bet_id, user_tg_id, selected_team, bet_amount, created_at)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (bet_id, user_tg_id) DO UPDATE 
+            SET selected_team = EXCLUDED.selected_team, bet_amount = EXCLUDED.bet_amount
+        """
+        execute_query(query, (bet_id, user_tg_id, selected_team, bet_amount, datetime.datetime.now().isoformat()))
+        return True
+    except Exception as e:
+        print(f"❌ place_bet error: {e}")
+        return False
+
+def get_bet_users(bet_id: int):
+    try:
+        query = "SELECT * FROM amel_user_bets WHERE bet_id = %s"
+        result = execute_query(query, (bet_id,), fetch_all=True)
+        return result if result else []
+    except Exception as e:
+        print(f"❌ get_bet_users error: {e}")
+        return []
+
+def finish_worldcup_bet(bet_id: int, winner: str):
+    try:
+        query = "UPDATE amel_worldcup_bets SET winner = %s, is_finished = TRUE WHERE id = %s"
+        execute_query(query, (winner, bet_id))
+        return True
+    except Exception as e:
+        print(f"❌ finish_worldcup_bet error: {e}")
+        return False
+
+def get_challenge_settings(owner_id: int):
+    try:
+        query = "SELECT * FROM amel_challenge_settings WHERE owner_id = %s"
+        result = execute_query(query, (owner_id,), fetch_one=True)
+        if not result:
+            # ایجاد تنظیمات پیش‌فرض
+            query = """
+                INSERT INTO amel_challenge_settings (owner_id, math_challenge_active, worldcup_challenge_active, updated_at)
+                VALUES (%s, FALSE, FALSE, %s)
+                RETURNING *
+            """
+            result = execute_query(query, (owner_id, datetime.datetime.now().isoformat()), fetch_one=True)
+        return result if result else {"math_challenge_active": False, "worldcup_challenge_active": False}
+    except Exception as e:
+        print(f"❌ get_challenge_settings error: {e}")
+        return {"math_challenge_active": False, "worldcup_challenge_active": False}
+
+def update_challenge_settings(owner_id: int, key: str, value):
+    try:
+        query = """
+            INSERT INTO amel_challenge_settings (owner_id, updated_at) 
+            VALUES (%s, %s)
+            ON CONFLICT (owner_id) DO UPDATE 
+            SET {key} = %s, updated_at = %s
+        """.format(key=key)
+        execute_query(query, (owner_id, datetime.datetime.now().isoformat(), value, datetime.datetime.now().isoformat()))
+        return True
+    except Exception as e:
+        print(f"❌ update_challenge_settings error: {e}")
+        return False
