@@ -2,7 +2,7 @@ import threading
 import telebot
 from telebot import types
 import database as db
-import database_supabase as db
+import db_cache as cache
 import config
 import datetime
 
@@ -15,42 +15,50 @@ _user_cache = {}
 _user_cache_time = {}
 
 def get_user_account(tg_id: int):
-    """دریافت حساب کاربر با کش 60 ثانیه"""
-    now = datetime.datetime.now().timestamp()
-    
-    # بررسی کش
-    if tg_id in _user_cache:
-        if now - _user_cache_time.get(tg_id, 0) < 60:
-            return _user_cache[tg_id]
-    
-    # دریافت از دیتابیس
+    """دریافت حساب کاربر - مستقیم از دیتابیس دائمی (Supabase) بدون کش"""
     account = db.get_account_by_tg_id(tg_id)
-    _user_cache[tg_id] = account
-    _user_cache_time[tg_id] = now
+    print(f"🔍 جستجوی کاربر {tg_id} در دیتابیس: {account}")
     return account
+
+def clear_user_cache(tg_id: int = None):
+    """پاک کردن کش کاربر"""
+    if tg_id:
+        _user_cache.pop(tg_id, None)
+        _user_cache_time.pop(tg_id, None)
+    else:
+        _user_cache.clear()
+        _user_cache_time.clear()
+    print("✅ کش کاربران پاک شد")
 
 # ─── کش برای کاهش کوئری ──────────────────────────────────────────────────────
 _user_settings_cache = {}
 _cache_timestamps = {}
 
 def get_cached_setting(owner_id: int, key: str, default=None):
-    """دریافت تنظیمات با کش برای سرعت بالا"""
-    cache_key = f"{owner_id}:{key}"
-    if cache_key in _user_settings_cache:
-        timestamp = _cache_timestamps.get(cache_key, 0)
-        if datetime.datetime.now().timestamp() - timestamp < 30:  # کش 30 ثانیه
-            return _user_settings_cache[cache_key]
-    
+    """دریافت تنظیمات - مستقیم از دیتابیس دائمی (Supabase) بدون کش"""
     value = db.get_setting(owner_id, key, default)
-    _user_settings_cache[cache_key] = value
-    _cache_timestamps[cache_key] = datetime.datetime.now().timestamp()
+    print(f"🔍 دریافت تنظیمات {key} برای کاربر {owner_id}: {value}")
     return value
+
+def clear_settings_cache():
+    """پاک کردن کش تنظیمات"""
+    _user_settings_cache.clear()
+    _cache_timestamps.clear()
+    print("✅ کش تنظیمات پاک شد")
 
 def get_bot():
     return _bot
 
 def start_token_bot():
     global _bot, BOT_USERNAME
+
+    # ✅ تست اتصال به دیتابیس
+    try:
+        test = db.get_all_accounts()
+        print(f"✅ اتصال به دیتابیس برقرار است! تعداد کاربران: {len(test)}")
+    except Exception as e:
+        print(f"❌ خطا در اتصال به دیتابیس: {e}")
+        return
 
     if not config.BOT_TOKEN:
         print("⚠️ BOT_TOKEN تنظیم نشده — ربات توکن غیرفعال است")
@@ -78,11 +86,11 @@ def start_token_bot():
 
     # ─── توابع کمکی ──────────────────────────────────────────────────────────
     def get_user_stats(owner_id: int):
-        """دریافت آمار کاربر با کش"""
+        """دریافت آمار کاربر"""
         return db.get_token_stats(owner_id)
 
     def get_user_settings(owner_id: int):
-        """دریافت تنظیمات کاربر با کش"""
+        """دریافت تنظیمات کاربر"""
         keys = [
             "self_bot_active", "secretary_active", "anti_delete_active",
             "anti_link_active", "auto_seen_active", "auto_reaction_active",
@@ -126,7 +134,7 @@ def start_token_bot():
         markup.add("🔗 رفرال", "🛒 خرید توکن")
         markup.add("⚙️ تنظیمات سلف", "📊 وضعیت سلف")
         markup.add("📖 راهنما", "👤 پروفایل من")
-        markup.add("🔄 به‌روزرسانی منو")  # ✅ اضافه شد
+        markup.add("🔄 به‌روزرسانی منو")
         return markup
 
     def settings_keyboard():
@@ -193,7 +201,7 @@ def start_token_bot():
         markup.add("⚙️ تنظیمات سلف", "📊 وضعیت سلف")
         markup.add("📢 مدیریت چنل‌ها", "👥 مدیریت کاربران")
         markup.add("📖 راهنما", "👤 پروفایل من")
-        markup.add("🔄 به‌روزرسانی منو")  # ✅ اضافه شد
+        markup.add("🔄 به‌روزرسانی منو")
         return markup
 
     def owner_users_keyboard():
@@ -203,17 +211,12 @@ def start_token_bot():
         markup.add("🔙 بازگشت")
         return markup
 
-    # ─── تابع به‌روزرسانی وضعیت دکمه‌ها ──────────────────────────────────
-    def get_toggle_status(owner_id: int, key: str, label_on: str, label_off: str):
-        """دریافت وضعیت یک تنظیمات برای نمایش در دکمه"""
-        status = get_cached_setting(owner_id, key, "0")
-        return f"{label_on if status == '1' else label_off} {'✅' if status == '1' else '❌'}"
-
     # ─── /start ─────────────────────────────────────────────────────────────
     @_bot.message_handler(commands=["start"])
     def cmd_start(message):
         try:
             tg_id = message.from_user.id
+            print(f"📩 دستور start از کاربر {tg_id} دریافت شد")
             
             # ۱. پردازش رفرال
             parts = message.text.strip().split()
@@ -237,12 +240,14 @@ def start_token_bot():
             if not require_membership(message):
                 return
 
-            # ۳. ✅ بررسی کامل حساب کاربری
+            # ۳. بررسی کامل حساب کاربری
             account = get_user_account(tg_id)
+            print(f"👤 حساب کاربری پیدا شده: {account}")
             site_url = getattr(config, "SITE_URL", "")
 
             # ❌ اگر حساب وجود نداشت
             if not account:
+                print(f"❌ کاربر {tg_id} در دیتابیس پیدا نشد")
                 markup = types.InlineKeyboardMarkup()
                 if site_url:
                     markup.add(types.InlineKeyboardButton("🌐 ثبت‌نام در پنل", url=site_url))
@@ -258,6 +263,8 @@ def start_token_bot():
 
             # ✅ حساب وجود دارد ولی لاگین نیست
             logged_in = db.get_setting(account["id"], "logged_in") == "1"
+            print(f"📊 وضعیت لاگین کاربر {tg_id}: {logged_in}")
+            
             if not logged_in:
                 markup = types.InlineKeyboardMarkup()
                 if site_url:
@@ -345,15 +352,14 @@ def start_token_bot():
                 return
             
             # پاک کردن کش کاربر
-            _user_cache.pop(tg_id, None)
-            _user_cache_time.pop(tg_id, None)
+            clear_user_cache(tg_id)
             
             account = get_user_account(tg_id)
             if not account:
                 return _bot.reply_to(message, "⚠️ ابتدا در پنل وب ثبت‌نام کنید.", 
                                    reply_markup=types.ReplyKeyboardRemove())
             
-            # ✅ بررسی مجدد لاگین
+            # بررسی مجدد لاگین
             logged_in = db.get_setting(account["id"], "logged_in") == "1"
             if not logged_in:
                 site_url = getattr(config, "SITE_URL", "")
