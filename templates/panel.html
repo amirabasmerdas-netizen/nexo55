@@ -71,7 +71,7 @@
     }
     .sponsors-footer a:hover { text-decoration: underline; }
     
-    /* کارت قیمت توکن */
+    /* کارت قیمت الماس */
     .token-price-badge {
       display: inline-block;
       background: linear-gradient(135deg, #f59e0b, #d97706);
@@ -336,7 +336,7 @@ async function verify2fa() {
         <span class="sb-icon">📥</span> سیو مدیا
       </a>
       <a class="sb-item" id="nav-tokens" onclick="showSection('dashboard',this); setTimeout(()=>{const c=document.getElementById('tokenCard');if(c)c.scrollIntoView({behavior:'smooth'});},150);" style="display:none">
-        <span class="sb-icon">🪙</span> توکن‌ها
+        <span class="sb-icon">💎</span> الماس‌ها
       </a>
       <a class="sb-item" id="nav-settings" onclick="showSection('settings',this)">
         <span class="sb-icon">⚙️</span> تنظیمات
@@ -382,9 +382,9 @@ async function verify2fa() {
           </div>
         </div>
         <div class="ph-tokens" id="phTokensWrap" style="display:none">
-          <span class="ph-token-icon">🪙</span>
+          <span class="ph-token-icon">💎</span>
           <span id="phTokenBalance" class="ph-token-num">--</span>
-          <span class="ph-token-label">توکن</span>
+          <span class="ph-token-label">الماس</span>
         </div>
         <div class="ph-status">
           <span class="ph-dot" id="phDot"></span>
@@ -561,9 +561,9 @@ async function verify2fa() {
           </div>
         </div>
 
-        <!-- توکن (full width) -->
+        <!-- الماس (full width) -->
         <div class="dash-card dc-token-card" id="tokenCard" style="display:none">
-          <div class="dc-header dc-header-gold"><span class="dc-icon">🪙</span> مدیریت توکن</div>
+          <div class="dc-header dc-header-gold"><span class="dc-icon">💎</span> مدیریت الماس</div>
           <div class="dc-body dc-token-body">
             <div class="dc-token-stats">
               <div class="dc-token-stat">
@@ -582,14 +582,14 @@ async function verify2fa() {
             <div class="dc-token-actions">
               <button class="dc-btn-full dc-gold" id="dailyBtn" onclick="claimDaily()">🎁 هدیه روزانه</button>
               <button class="dc-btn-full dc-cyan" onclick="copyReferral()">🔗 کپی لینک رفرال</button>
-              <button class="dc-btn-full dc-purple" onclick="buyTokens()">🛒 خرید توکن</button>
+              <button class="dc-btn-full dc-purple" onclick="buyTokens()">🛒 خرید الماس</button>
             </div>
             <div class="dc-token-info-bar">
-              ⚡ <b id="tkSession">2</b> توکن = <b id="tkHours">2</b> ساعت سلف &nbsp;|&nbsp;
-              🎁 <b id="tkDaily">1</b> توکن هدیه روزانه &nbsp;|&nbsp;
-              🔗 <b id="tkRef">12</b> توکن به ازای هر رفرال
+              ⚡ <b id="tkSession">2</b> الماس = <b id="tkHours">2</b> ساعت سلف &nbsp;|&nbsp;
+              🎁 <b id="tkDaily">0.5</b> الماس هدیه روزانه &nbsp;|&nbsp;
+              🔗 <b id="tkRef">12</b> الماس به ازای هر رفرال
               <br>
-              💰 قیمت هر توکن: <span class="token-price-badge">200 تومان</span>
+              💰 قیمت هر الماس: <span class="token-price-badge">200 تومان</span>
             </div>
           </div>
         </div>
@@ -988,7 +988,7 @@ function saveSpamDelay() { saveSettings({spam_delay:document.getElementById("spa
 async function tgLogout() { if(!confirm("از حساب تلگرام خارج شوید؟")) return; await fetch("/api/logout",{method:"POST"}); location.replace("/tg-login"); }
 async function panelLogout() { if(!confirm("از پنل خارج شوید؟")) return; await fetch("/api/panel-logout",{method:"POST"}); location.replace("/panel-login"); }
 
-// ─── سیستم توکن ─────────────────────────────────────────────────────────────
+// ─── سیستم الماس ─────────────────────────────────────────────────────────────
 async function loadTokens() {
   try {
     const data = await (await fetch("/api/tokens")).json();
@@ -1032,7 +1032,7 @@ async function claimDaily() {
 
 function copyReferral() {
   if (!window._botUsername) {
-    showToast("ربات توکن تنظیم نشده","error");
+    showToast("ربات الماس تنظیم نشده","error");
     return;
   }
   const link = `https://t.me/${window._botUsername}?start=ref_${window._ownerId}`;
@@ -1045,7 +1045,7 @@ function copyReferral() {
 
 function buyTokens() {
   if (!window._botUsername) {
-    showToast("ربات توکن تنظیم نشده","error");
+    showToast("ربات الماس تنظیم نشده","error");
     return;
   }
   window.open(`https://t.me/${window._botUsername}?start=buy`, "_blank");
