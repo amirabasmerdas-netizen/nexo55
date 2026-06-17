@@ -285,18 +285,6 @@ def _register_handlers(cl: TelegramClient, owner_id: int, entry: dict):
                     ))
                 except Exception as e:
                     print(f"⚠️ خطا در ری‌اکشن گروه: {e}")
-            
-            # ✅ پاسخ به دستور "موجودی" در گروه
-            if text == "موجودی":
-                account = db.get_account_by_tg_id(sender_id)
-                if account:
-                    balance = db.get_token_balance(account['id'])
-                    await event.reply(f"💎 موجودی شما: {balance} الماس")
-                else:
-                    await event.reply("❌ شما در پنل ثبت‌نام نکرده‌اید!\nلطفاً در ربات @Nexo55bot ثبت‌نام کنید.")
-                return
-            
-            return
 
         if db.is_silent_chat(owner_id, chat_id) or db.is_silent_user(owner_id, sender_id):
             return
@@ -476,17 +464,6 @@ async def _handle_command(cl, event, text, owner_id, entry):
 
     async def edit(t):
         await _safe_edit(event, owner_id, t)
-
-    # ─── موجودی ────────────────────────────────────────────────────────────────
-    if text == "موجودی":
-        tg_id = (await event.get_sender()).id
-        account = db.get_account_by_tg_id(tg_id)
-        if account:
-            balance = db.get_token_balance(account['id'])
-            await edit(f"💎 موجودی شما: {balance} الماس")
-        else:
-            await edit("❌ شما در پنل ثبت‌نام نکرده‌اید!\nلطفاً در ربات @Nexo55bot ثبت‌نام کنید.")
-        return
 
     # ─── دشمن ────────────────────────────────────────────────────────────────
     if text.startswith("تنظیم دشمن"):
