@@ -238,6 +238,10 @@ def init_tables():
         CREATE INDEX IF NOT EXISTS idx_bet_games_chat_status 
         ON amel_bet_games(chat_id, status)
         """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_bet_games_created_at 
+        ON amel_bet_games(created_at)
+        """,
     ]
     
     for query in queries:
@@ -812,13 +816,26 @@ def join_bet_game(game_id: int, player2_id: int):
         print(f"❌ join_bet_game error: {e}")
         return False
 
-def get_active_bet_game(chat_id: int):
+def get_all_active_bet_games(chat_id: int):
     try:
-        query = "SELECT * FROM amel_bet_games WHERE chat_id = %s AND status IN ('waiting', 'active') ORDER BY created_at DESC LIMIT 1"
-        result = execute_query(query, (chat_id,), fetch_one=True)
+        query = "SELECT * FROM amel_bet_games WHERE chat_id = %s AND status IN ('waiting', 'active') ORDER BY created_at DESC"
+        result = execute_query(query, (chat_id,), fetch_all=True)
+        return result if result else []
+    except Exception as e:
+        print(f"❌ get_all_active_bet_games error: {e}")
+        return []
+
+def get_active_bet_game(chat_id: int):
+    games = get_all_active_bet_games(chat_id)
+    return games[0] if games else None
+
+def get_bet_game_by_message(chat_id: int, message_id: int):
+    try:
+        query = "SELECT * FROM amel_bet_games WHERE chat_id = %s AND message_id = %s AND status IN ('waiting', 'active')"
+        result = execute_query(query, (chat_id, message_id), fetch_one=True)
         return result if result else None
     except Exception as e:
-        print(f"❌ get_active_bet_game error: {e}")
+        print(f"❌ get_bet_game_by_message error: {e}")
         return None
 
 def finish_bet_game(game_id: int, winner_id: int):
@@ -830,6 +847,15 @@ def finish_bet_game(game_id: int, winner_id: int):
         print(f"❌ finish_bet_game error: {e}")
         return False
 
+def expire_bet_game(game_id: int):
+    try:
+        query = "UPDATE amel_bet_games SET status = 'expired' WHERE id = %s AND status = 'waiting'"
+        execute_query(query, (game_id,))
+        return True
+    except Exception as e:
+        print(f"❌ expire_bet_game error: {e}")
+        return False
+
 def get_bet_game(game_id: int):
     try:
         query = "SELECT * FROM amel_bet_games WHERE id = %s"
@@ -838,6 +864,35 @@ def get_bet_game(game_id: int):
     except Exception as e:
         print(f"❌ get_bet_game error: {e}")
         return None
+
+def get_expired_bet_games():
+    try:
+        expire_time = (datetime.datetime.now() - datetime.timedelta(hours=1)).isoformat()
+        query = "SELECT * FROM amel_bet_games WHERE status = 'waiting' AND created_at < %s"
+        result = execute_query(query, (expire_time,), fetch_all=True)
+        return result if result else []
+    except Exception as e:
+        print(f"❌ get_expired_bet_games error: {e}")
+        return []
+
+# ─── انتقال الماس ──────────────────────────────────────────────────────────────
+def transfer_tokens(from_owner_id: int, to_tg_id: int, amount: int) -> bool:
+    try:
+        balance = get_token_balance(from_owner_id)
+        if balance < amount:
+            return False
+        
+        to_account = get_account_by_tg_id(to_tg_id)
+        if not to_account:
+            return False
+        
+        deduct_tokens(from_owner_id, amount)
+        add_tokens(to_account['id'], amount)
+        
+        return True
+    except Exception as e:
+        print(f"❌ transfer_tokens error: {e}")
+        return False
 
 # ─── مقداردهی اولیه ──────────────────────────────────────────────────────────
 try:
