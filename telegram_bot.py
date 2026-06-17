@@ -153,7 +153,7 @@ def start_token_bot():
             reply_markup=markup
         )
 
-    # ─── ساخت کیبوردها ──────────────────────────────────────────────────────
+    # ─── ساخت کیبوردها (فقط برای پیوی) ──────────────────────────────────────
     def user_keyboard():
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
         markup.add("💰 موجودی", "🎁 هدیه روزانه")
@@ -404,8 +404,8 @@ def start_token_bot():
             logger.error(f"❌ خطا در cmd_refresh_menu: {e}")
             _bot.reply_to(message, f"⚠️ خطا: {e}")
 
-    # ─── دکمه‌های اصلی ────────────────────────────────────────────────────
-    @_bot.message_handler(func=lambda m: m.text == "💰 موجودی")
+    # ─── دکمه‌های اصلی (فقط پیوی) ────────────────────────────────────────
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "💰 موجودی")
     def cmd_balance(message):
         try:
             if not require_membership(message): return
@@ -430,7 +430,7 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_balance: {e}")
 
-    @_bot.message_handler(func=lambda m: m.text == "🎁 هدیه روزانه")
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "🎁 هدیه روزانه")
     def cmd_daily(message):
         try:
             if not require_membership(message): return
@@ -450,7 +450,7 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_daily: {e}")
 
-    @_bot.message_handler(func=lambda m: m.text == "🔗 رفرال")
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "🔗 رفرال")
     def cmd_referral(message):
         try:
             if not require_membership(message): return
@@ -474,7 +474,7 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_referral: {e}")
 
-    @_bot.message_handler(func=lambda m: m.text == "🛒 خرید الماس")
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "🛒 خرید الماس")
     def cmd_buy(message):
         try:
             if not require_membership(message): return
@@ -499,7 +499,7 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_buy: {e}")
 
-    @_bot.message_handler(func=lambda m: m.text == "👤 پروفایل من")
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "👤 پروفایل من")
     def cmd_profile(message):
         try:
             if not require_membership(message): return
@@ -523,7 +523,7 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_profile: {e}")
 
-    @_bot.message_handler(func=lambda m: m.text == "📊 وضعیت سلف")
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "📊 وضعیت سلف")
     def cmd_status(message):
         try:
             if not require_membership(message): return
@@ -561,7 +561,7 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_status: {e}")
 
-    @_bot.message_handler(func=lambda m: m.text == "📖 راهنما")
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "📖 راهنما")
     def cmd_help(message):
         try:
             if not require_membership(message): return
@@ -611,8 +611,8 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_help: {e}")
 
-    # ─── تنظیمات سلف ────────────────────────────────────────────────────────
-    @_bot.message_handler(func=lambda m: m.text == "⚙️ تنظیمات سلف")
+    # ─── تنظیمات سلف (فقط پیوی) ────────────────────────────────────────────
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "⚙️ تنظیمات سلف")
     def cmd_settings(message):
         try:
             if not require_membership(message): return
@@ -640,8 +640,8 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_settings: {e}")
 
-    # ─── دکمه‌های تنظیمات ──────────────────────────────────────────────────
-    @_bot.message_handler(func=lambda m: m.text == "🟢 سلف روشن")
+    # ─── دکمه‌های تنظیمات (فقط پیوی) ──────────────────────────────────────
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "🟢 سلف روشن")
     def cmd_start_bot(message):
         try:
             if not require_membership(message): return
@@ -671,7 +671,7 @@ def start_token_bot():
             logger.error(f"❌ خطا در cmd_start_bot: {e}")
             _bot.reply_to(message, f"⚠️ خطا: {e}", reply_markup=settings_keyboard())
 
-    @_bot.message_handler(func=lambda m: m.text == "🔴 سلف خاموش")
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "🔴 سلف خاموش")
     def cmd_stop_bot(message):
         try:
             if not require_membership(message): return
@@ -687,7 +687,7 @@ def start_token_bot():
             logger.error(f"❌ خطا در cmd_stop_bot: {e}")
             _bot.reply_to(message, f"⚠️ خطا: {e}", reply_markup=settings_keyboard())
 
-    @_bot.message_handler(func=lambda m: m.text == "🤖 منشی")
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "🤖 منشی")
     def cmd_secretary_menu(message):
         try:
             if not require_membership(message): return
@@ -711,7 +711,7 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_secretary_menu: {e}")
 
-    @_bot.message_handler(func=lambda m: m.text.startswith("منشی "))
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text.startswith("منشی "))
     def cmd_toggle_secretary(message):
         try:
             if not require_membership(message): return
@@ -731,7 +731,7 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_toggle_secretary: {e}")
 
-    @_bot.message_handler(func=lambda m: m.text == "✏️ تغییر پیام منشی")
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "✏️ تغییر پیام منشی")
     def cmd_change_secretary_msg(message):
         try:
             if not require_membership(message): return
@@ -760,8 +760,8 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در process_secretary_msg: {e}")
 
-    # ─── امنیت ──────────────────────────────────────────────────────────────
-    @_bot.message_handler(func=lambda m: m.text == "🛡️ امنیت")
+    # ─── امنیت (فقط پیوی) ──────────────────────────────────────────────────
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "🛡️ امنیت")
     def cmd_security_menu(message):
         try:
             if not require_membership(message): return
@@ -781,8 +781,8 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_security_menu: {e}")
 
-    # ─── دکمه‌های امنیت ────────────────────────────────────────────────────
-    @_bot.message_handler(func=lambda m: m.text.startswith("🛡️ ضد حذف"))
+    # ─── دکمه‌های امنیت (فقط پیوی) ────────────────────────────────────────
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text.startswith("🛡️ ضد حذف"))
     def cmd_toggle_anti_delete(message):
         try:
             if not require_membership(message): return
@@ -801,7 +801,7 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_toggle_anti_delete: {e}")
 
-    @_bot.message_handler(func=lambda m: m.text.startswith("🔗 ضد لینک"))
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text.startswith("🔗 ضد لینک"))
     def cmd_toggle_anti_link(message):
         try:
             if not require_membership(message): return
@@ -820,7 +820,7 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_toggle_anti_link: {e}")
 
-    @_bot.message_handler(func=lambda m: m.text.startswith("🔒 قفل پیوی"))
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text.startswith("🔒 قفل پیوی"))
     def cmd_toggle_private_lock(message):
         try:
             if not require_membership(message): return
@@ -839,7 +839,7 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_toggle_private_lock: {e}")
 
-    @_bot.message_handler(func=lambda m: m.text.startswith("⚔️ پاسخ دشمن"))
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text.startswith("⚔️ پاسخ دشمن"))
     def cmd_toggle_enemy_reply(message):
         try:
             if not require_membership(message): return
@@ -858,8 +858,8 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_toggle_enemy_reply: {e}")
 
-    # ─── اتوماسیون ──────────────────────────────────────────────────────────
-    @_bot.message_handler(func=lambda m: m.text == "⚡ اتوماسیون")
+    # ─── اتوماسیون (فقط پیوی) ──────────────────────────────────────────────
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "⚡ اتوماسیون")
     def cmd_automation_menu(message):
         try:
             if not require_membership(message): return
@@ -880,8 +880,8 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_automation_menu: {e}")
 
-    # ─── دکمه‌های اتوماسیون ────────────────────────────────────────────────
-    @_bot.message_handler(func=lambda m: m.text.startswith("👁️ سین خودکار"))
+    # ─── دکمه‌های اتوماسیون (فقط پیوی) ────────────────────────────────────
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text.startswith("👁️ سین خودکار"))
     def cmd_toggle_auto_seen(message):
         try:
             if not require_membership(message): return
@@ -900,7 +900,7 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_toggle_auto_seen: {e}")
 
-    @_bot.message_handler(func=lambda m: m.text.startswith("❤️ ری‌اکشن"))
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text.startswith("❤️ ری‌اکشن"))
     def cmd_toggle_auto_reaction(message):
         try:
             if not require_membership(message): return
@@ -919,7 +919,7 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_toggle_auto_reaction: {e}")
 
-    @_bot.message_handler(func=lambda m: m.text.startswith("💾 ذخیره مدیا"))
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text.startswith("💾 ذخیره مدیا"))
     def cmd_toggle_auto_save(message):
         try:
             if not require_membership(message): return
@@ -938,7 +938,7 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_toggle_auto_save: {e}")
 
-    @_bot.message_handler(func=lambda m: m.text.startswith("⏰ ساعت نام/بیو"))
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text.startswith("⏰ ساعت نام/بیو"))
     def cmd_clock_menu(message):
         try:
             if not require_membership(message): return
@@ -962,7 +962,7 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_clock_menu: {e}")
 
-    @_bot.message_handler(func=lambda m: m.text.startswith("ساعت نام "))
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text.startswith("ساعت نام "))
     def cmd_toggle_clock_name(message):
         try:
             if not require_membership(message): return
@@ -981,7 +981,7 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_toggle_clock_name: {e}")
 
-    @_bot.message_handler(func=lambda m: m.text.startswith("ساعت بیو "))
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text.startswith("ساعت بیو "))
     def cmd_toggle_clock_bio(message):
         try:
             if not require_membership(message): return
@@ -1000,8 +1000,8 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_toggle_clock_bio: {e}")
 
-    # ─── فونت ────────────────────────────────────────────────────────────────
-    @_bot.message_handler(func=lambda m: m.text == "🔤 فونت")
+    # ─── فونت (فقط پیوی) ────────────────────────────────────────────────────
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "🔤 فونت")
     def cmd_font_menu(message):
         try:
             if not require_membership(message): return
@@ -1019,7 +1019,7 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_font_menu: {e}")
 
-    @_bot.message_handler(func=lambda m: m.text.startswith("فونت ") and len(m.text) <= 7)
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text.startswith("فونت ") and len(m.text) <= 7)
     def cmd_set_font(message):
         try:
             if not require_membership(message): return
@@ -1037,7 +1037,7 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_set_font: {e}")
 
-    @_bot.message_handler(func=lambda m: m.text == "📝 لیست فونت")
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "📝 لیست فونت")
     def cmd_list_fonts(message):
         try:
             if not require_membership(message): return
@@ -1075,8 +1075,8 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_list_fonts: {e}")
 
-    # ─── لیست‌ها ─────────────────────────────────────────────────────────────
-    @_bot.message_handler(func=lambda m: m.text == "📋 لیست‌ها")
+    # ─── لیست‌ها (فقط پیوی) ─────────────────────────────────────────────────
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "📋 لیست‌ها")
     def cmd_lists_menu(message):
         try:
             if not require_membership(message): return
@@ -1095,7 +1095,7 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_lists_menu: {e}")
 
-    @_bot.message_handler(func=lambda m: m.text == "👤 مدیریت دشمن")
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "👤 مدیریت دشمن")
     def cmd_enemy_menu(message):
         try:
             if not require_membership(message): return
@@ -1119,7 +1119,7 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_enemy_menu: {e}")
 
-    @_bot.message_handler(func=lambda m: m.text == "💚 مدیریت دوست")
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "💚 مدیریت دوست")
     def cmd_friend_menu(message):
         try:
             if not require_membership(message): return
@@ -1143,8 +1143,8 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_friend_menu: {e}")
 
-    # ─── دکمه‌های دشمن ──────────────────────────────────────────────────────
-    @_bot.message_handler(func=lambda m: m.text == "➕ افزودن دشمن")
+    # ─── دکمه‌های دشمن (فقط پیوی) ──────────────────────────────────────────
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "➕ افزودن دشمن")
     def cmd_add_enemy_prompt(message):
         try:
             if not require_membership(message): return
@@ -1190,7 +1190,7 @@ def start_token_bot():
             logger.error(f"❌ خطا در process_add_enemy: {e}")
             _bot.reply_to(message, f"⚠️ خطا: {e}", reply_markup=enemy_keyboard())
 
-    @_bot.message_handler(func=lambda m: m.text == "❌ حذف دشمن")
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "❌ حذف دشمن")
     def cmd_remove_enemy_prompt(message):
         try:
             if not require_membership(message): return
@@ -1240,7 +1240,7 @@ def start_token_bot():
             logger.error(f"❌ خطا در process_remove_enemy: {e}")
             _bot.reply_to(message, f"⚠️ خطا: {e}", reply_markup=enemy_keyboard())
 
-    @_bot.message_handler(func=lambda m: m.text == "📋 نمایش دشمن‌ها")
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "📋 نمایش دشمن‌ها")
     def cmd_show_enemies(message):
         try:
             if not require_membership(message): return
@@ -1263,7 +1263,7 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_show_enemies: {e}")
 
-    @_bot.message_handler(func=lambda m: m.text == "🗑️ پاک کردن دشمن‌ها")
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "🗑️ پاک کردن دشمن‌ها")
     def cmd_clear_enemies(message):
         try:
             if not require_membership(message): return
@@ -1276,8 +1276,8 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_clear_enemies: {e}")
 
-    # ─── دکمه‌های دوست ──────────────────────────────────────────────────────
-    @_bot.message_handler(func=lambda m: m.text == "➕ افزودن دوست")
+    # ─── دکمه‌های دوست (فقط پیوی) ──────────────────────────────────────────
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "➕ افزودن دوست")
     def cmd_add_friend_prompt(message):
         try:
             if not require_membership(message): return
@@ -1323,7 +1323,7 @@ def start_token_bot():
             logger.error(f"❌ خطا در process_add_friend: {e}")
             _bot.reply_to(message, f"⚠️ خطا: {e}", reply_markup=friend_keyboard())
 
-    @_bot.message_handler(func=lambda m: m.text == "❌ حذف دوست")
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "❌ حذف دوست")
     def cmd_remove_friend_prompt(message):
         try:
             if not require_membership(message): return
@@ -1373,7 +1373,7 @@ def start_token_bot():
             logger.error(f"❌ خطا در process_remove_friend: {e}")
             _bot.reply_to(message, f"⚠️ خطا: {e}", reply_markup=friend_keyboard())
 
-    @_bot.message_handler(func=lambda m: m.text == "📋 نمایش دوست‌ها")
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "📋 نمایش دوست‌ها")
     def cmd_show_friends(message):
         try:
             if not require_membership(message): return
@@ -1396,7 +1396,7 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_show_friends: {e}")
 
-    @_bot.message_handler(func=lambda m: m.text == "🗑️ پاک کردن دوست‌ها")
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "🗑️ پاک کردن دوست‌ها")
     def cmd_clear_friends(message):
         try:
             if not require_membership(message): return
@@ -1409,8 +1409,8 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_clear_friends: {e}")
 
-    # ─── دکمه بازگشت ──────────────────────────────────────────────────────
-    @_bot.message_handler(func=lambda m: m.text == "🔙 بازگشت")
+    # ─── دکمه بازگشت (فقط پیوی) ──────────────────────────────────────────────
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "🔙 بازگشت")
     def cmd_back(message):
         try:
             account = get_user_account(message.from_user.id)
@@ -1424,10 +1424,10 @@ def start_token_bot():
             logger.error(f"❌ خطا در cmd_back: {e}")
 
     # ─── ════════════════════════════════════════════════════════════════ ───
-    # ─── 🎯 چالش‌ها ─────────────────────────────────────────────────────── ───
+    # ─── 🎯 چالش‌ها (فقط مالک در پیوی) ───────────────────────────────── ───
     # ─── ════════════════════════════════════════════════════════════════ ───
 
-    @_bot.message_handler(func=lambda m: m.text == "🎯 چالش‌ها")
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "🎯 چالش‌ها")
     def cmd_challenges(message):
         try:
             if message.from_user.id != config.OWNER_TG_ID:
@@ -1445,7 +1445,7 @@ def start_token_bot():
             logger.error(f"❌ cmd_challenges error: {e}")
 
     # ─── چالش ریاضی ──────────────────────────────────────────────────────────
-    @_bot.message_handler(func=lambda m: m.text == "🧮 چالش ریاضی")
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "🧮 چالش ریاضی")
     def cmd_math_challenge(message):
         try:
             if message.from_user.id != config.OWNER_TG_ID:
@@ -1469,7 +1469,7 @@ def start_token_bot():
             logger.error(f"❌ cmd_math_challenge error: {e}")
 
     # ─── پیش‌بینی جام جهانی ──────────────────────────────────────────────────
-    @_bot.message_handler(func=lambda m: m.text == "⚽ پیش‌بینی جام جهانی")
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "⚽ پیش‌بینی جام جهانی")
     def cmd_worldcup(message):
         try:
             if message.from_user.id != config.OWNER_TG_ID:
@@ -1729,7 +1729,7 @@ def start_token_bot():
             _bot.reply_to(message, f"❌ خطا: {str(e)}")
 
     # ─── اعلام برنده جام جهانی ──────────────────────────────────────────────
-    @_bot.message_handler(func=lambda m: m.text == "🏆 اعلام برنده")
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "🏆 اعلام برنده")
     def cmd_announce_winner(message):
         try:
             if message.from_user.id != config.OWNER_TG_ID:
@@ -1810,7 +1810,7 @@ def start_token_bot():
             _bot.answer_callback_query(call.id, f"❌ خطا: {str(e)}", show_alert=True)
 
     # ─── پیام عمومی ──────────────────────────────────────────────────────────
-    @_bot.message_handler(func=lambda m: m.text == "📢 پیام عمومی")
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "📢 پیام عمومی")
     def cmd_broadcast(message):
         try:
             if message.from_user.id != config.OWNER_TG_ID:
@@ -1864,6 +1864,10 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ process_broadcast error: {e}")
             _bot.reply_to(message, f"❌ خطا: {str(e)}", reply_markup=owner_keyboard())
+
+    # ─── ════════════════════════════════════════════════════════════════ ───
+    # ─── 📌 دستورات گروه (فقط موجودی و شرط‌بندی) ────────────────────── ───
+    # ─── ════════════════════════════════════════════════════════════════ ───
 
     # ─── پاسخ به دستور موجودی در گروه ──────────────────────────────────────────
     @_bot.message_handler(func=lambda m: m.chat.type in ['group', 'supergroup'] and m.text and m.text.strip() == "موجودی")
@@ -2026,8 +2030,15 @@ def start_token_bot():
             logger.error(f"❌ خطا در callback_join_bet: {e}")
             _bot.answer_callback_query(call.id, f"❌ خطا: {str(e)}", show_alert=True)
 
-    # ─── دستورات مالک ──────────────────────────────────────────────────────
-    @_bot.message_handler(func=lambda m: m.text == "📢 مدیریت چنل‌ها")
+    # ─── ❌ نادیده گرفتن همه پیام‌های گروه (به جز دستورات خاص) ──────────────────
+    @_bot.message_handler(func=lambda m: m.chat.type in ['group', 'supergroup'])
+    def ignore_group_messages(message):
+        # این تابع همه پیام‌های گروه را که توسط هندلرهای خاص پردازش نشده‌اند، نادیده می‌گیرد
+        # هیچ کاری انجام نمی‌دهد
+        pass
+
+    # ─── دستورات مالک (فقط پیوی) ──────────────────────────────────────────────
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "📢 مدیریت چنل‌ها")
     def cmd_admin_channels(message):
         try:
             if message.from_user.id != config.OWNER_TG_ID: return
@@ -2047,7 +2058,7 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_admin_channels: {e}")
 
-    @_bot.message_handler(func=lambda m: m.text == "➕ افزودن چنل")
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "➕ افزودن چنل")
     def cmd_add_channel_prompt(message):
         try:
             if message.from_user.id != config.OWNER_TG_ID: return
@@ -2077,7 +2088,7 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در process_add_channel: {e}")
 
-    @_bot.message_handler(func=lambda m: m.text == "❌ حذف چنل")
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "❌ حذف چنل")
     def cmd_remove_channel_prompt(message):
         try:
             if message.from_user.id != config.OWNER_TG_ID: return            
@@ -2097,7 +2108,7 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_remove_channel_prompt: {e}")
 
-    @_bot.message_handler(func=lambda m: m.text.startswith("🗑️ @"))
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text.startswith("🗑️ @"))
     def cmd_remove_channel(message):
         try:
             if message.from_user.id != config.OWNER_TG_ID: return
@@ -2112,7 +2123,7 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_remove_channel: {e}")
 
-    @_bot.message_handler(func=lambda m: m.text == "📋 نمایش چنل‌ها")
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "📋 نمایش چنل‌ها")
     def cmd_show_channels(message):
         try:
             if message.from_user.id != config.OWNER_TG_ID: return
@@ -2131,7 +2142,7 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_show_channels: {e}")
 
-    @_bot.message_handler(func=lambda m: m.text == "👥 مدیریت کاربران")
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "👥 مدیریت کاربران")
     def cmd_admin_users(message):
         try:
             if message.from_user.id != config.OWNER_TG_ID: return
@@ -2152,7 +2163,7 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_admin_users: {e}")
 
-    @_bot.message_handler(func=lambda m: m.text == "📋 لیست کاربران")
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "📋 لیست کاربران")
     def cmd_list_users(message):
         try:
             if message.from_user.id != config.OWNER_TG_ID: return
@@ -2174,7 +2185,7 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در cmd_list_users: {e}")
 
-    @_bot.message_handler(func=lambda m: m.text == "🎁 هدیه به کاربر")
+    @_bot.message_handler(func=lambda m: m.chat.type == 'private' and m.text == "🎁 هدیه به کاربر")
     def cmd_give_prompt(message):
         try:
             if message.from_user.id != config.OWNER_TG_ID: return
