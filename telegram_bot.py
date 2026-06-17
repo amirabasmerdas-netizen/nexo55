@@ -1,3 +1,4 @@
+# telegram_bot.py
 import threading
 import telebot
 from telebot import types
@@ -1551,15 +1552,13 @@ def start_token_bot():
                 pass
             elif message.photo:
                 photo_file_id = message.photo[-1].file_id
+                print(f"📸 عکس دریافت شد: {photo_file_id}")
             else:
                 _bot.reply_to(message, "❌ لطفاً یک عکس ارسال کنید یا روی «ردی» کلیک کنید.")
                 return
             
             # ایجاد چالش در دیتابیس
             bet_id = db.create_worldcup_bet(1, team1, team2, match_time, photo_file_id)
-            
-            # ارسال به گروه
-            bet = db.get_active_worldcup_bet(1)
             
             # ساخت دکمه‌های شرط‌بندی
             markup = types.InlineKeyboardMarkup(row_width=2)
@@ -1581,12 +1580,14 @@ def start_token_bot():
             target_chat = -1002107981593  # @Gp_SelfNexo
             
             if photo_file_id:
-                sent = _bot.send_photo(target_chat, photo_file_id, caption=caption, reply_markup=markup)
+                sent = _bot.send_photo(
+                    target_chat, 
+                    photo_file_id,
+                    caption=caption, 
+                    reply_markup=markup
+                )
             else:
                 sent = _bot.send_message(target_chat, caption, reply_markup=markup)
-            
-            # ذخیره message_id در دیتابیس
-            # (می‌توانید اینجا message_id را ذخیره کنید)
             
             _waiting_for_worldcup.pop(message.chat.id, None)
             
