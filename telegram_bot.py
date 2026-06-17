@@ -22,10 +22,10 @@ OWNER_TG_ID = config.OWNER_TG_ID
 # ─── کش کاربران ──────────────────────────────────────────────────────────────
 _user_cache = {}
 _user_cache_time = {}
-_CACHE_TTL = 5
+_CACHE_TTL = 60  # افزایش به 60 ثانیه
 
 def get_user_account(tg_id: int):
-    now = datetime.datetime.now().timestamp()
+    now = time.time()
     
     if tg_id in _user_cache:
         if now - _user_cache_time.get(tg_id, 0) < _CACHE_TTL:
@@ -34,7 +34,6 @@ def get_user_account(tg_id: int):
     account = db.get_account_by_tg_id(tg_id)
     _user_cache[tg_id] = account
     _user_cache_time[tg_id] = now
-    logger.info(f"🔍 جستجوی کاربر {tg_id} در دیتابیس: {account}")
     return account
 
 def clear_user_cache(tg_id: int = None):
@@ -49,13 +48,14 @@ def clear_user_cache(tg_id: int = None):
 # ─── کش تنظیمات ──────────────────────────────────────────────────────────────
 _user_settings_cache = {}
 _cache_timestamps = {}
+_SETTINGS_CACHE_TTL = 60
 
 def get_cached_setting(owner_id: int, key: str, default=None):
     cache_key = f"{owner_id}:{key}"
-    now = datetime.datetime.now().timestamp()
+    now = time.time()
     
     if cache_key in _user_settings_cache:
-        if now - _cache_timestamps.get(cache_key, 0) < _CACHE_TTL:
+        if now - _cache_timestamps.get(cache_key, 0) < _SETTINGS_CACHE_TTL:
             return _user_settings_cache[cache_key]
     
     value = db.get_setting(owner_id, key, default)
@@ -74,6 +74,56 @@ _waiting_for_worldcup = {}    # مرحله ایجاد چالش جام جهانی
 
 def get_bot():
     return _bot
+
+# ─── پاک‌سازی خودکار شرط‌بندی‌های منقضی شده ──────────────────────────────────
+def clean_expired_bets():
+    try:
+        expired_games = db.get_expired_bet_games()
+        for game in expired_games:
+            db.expire_bet_game(game['id'])
+            
+            account = db.get_account_by_tg_id(game['player1_id'])
+            if account:
+                db.add_tokens(account['id'], game['bet_amount'])
+            
+            try:
+                if _bot:
+                    _bot.send_message(
+                        game['chat_id'],
+                        f"⏰ **بازی منقضی شد!**\n\n"
+                        f"شرط‌بندی با مبلغ <b>{game['bet_amount']}</b> الماس\n"
+                        f"پس از ۱ ساعت حریفی پیدا نشد.\n"
+                        f"💎 الماس به بازیکن اول برگشت داده شد."
+                    )
+                    
+                    try:
+                        _bot.edit_message_reply_markup(
+                            chat_id=game['chat_id'],
+                            message_id=game['message_id'],
+                            reply_markup=None
+                        )
+                    except:
+                        pass
+                        
+            except Exception as e:
+                logger.error(f"❌ خطا در ارسال پیام انقضا: {e}")
+                    
+    except Exception as e:
+        logger.error(f"❌ خطا در clean_expired_bets: {e}")
+
+# ─── تایمر پاک‌سازی خودکار ──────────────────────────────────────────────────
+def start_cleanup_timer():
+    def cleanup_loop():
+        while True:
+            time.sleep(300)  # ۵ دقیقه
+            try:
+                clean_expired_bets()
+            except Exception as e:
+                logger.error(f"❌ خطا در cleanup_loop: {e}")
+    
+    t = threading.Thread(target=cleanup_loop, daemon=True)
+    t.start()
+    logger.info("✅ تایمر پاک‌سازی شرط‌بندی‌ها شروع شد (هر ۵ دقیقه)")
 
 def start_token_bot():
     global _bot, BOT_USERNAME
@@ -105,15 +155,6 @@ def start_token_bot():
         logger.error(f"❌ خطا در اتصال ربات مدیریت: {e}")
         _bot = None
         return
-
-    import time as _time
-    for attempt in range(3):
-        try:
-            _bot.delete_webhook(drop_pending_updates=True)
-            _time.sleep(3)
-            break
-        except:
-            _time.sleep(3)
 
     # ─── توابع کمکی ──────────────────────────────────────────────────────────
     def get_user_stats(owner_id: int):
@@ -262,7 +303,6 @@ def start_token_bot():
                 return
 
             account = get_user_account(tg_id)
-            logger.info(f"👤 حساب کاربری پیدا شده: {account}")
             site_url = getattr(config, "SITE_URL", "")
 
             if not account:
@@ -281,7 +321,6 @@ def start_token_bot():
                 return
 
             logged_in = db.get_setting(account["id"], "logged_in") == "1"
-            logger.info(f"📊 وضعیت لاگین کاربر {tg_id}: {logged_in}")
             
             if not logged_in:
                 markup = types.InlineKeyboardMarkup()
@@ -1582,8 +1621,8 @@ def start_token_bot():
             
             markup = types.InlineKeyboardMarkup(row_width=2)
             markup.add(
-                types.InlineKeyboardButton(f"⚽ {team1}", callback_data=f"bet_{team1}"),
-                types.InlineKeyboardButton(f"⚽ {team2}", callback_data=f"bet_{team2}")
+                types.InlineKeyboardButton(f"⚽ {team1}", callback_data=f"bet_wc_{bet_id}_{team1}"),
+                types.InlineKeyboardButton(f"⚽ {team2}", callback_data=f"bet_wc_{bet_id}_{team2}")
             )
             
             caption = (
@@ -1610,7 +1649,9 @@ def start_token_bot():
                 else:
                     sent = _bot.send_message(target_chat, caption, reply_markup=markup)
                 
-                logger.info(f"✅ پیام با موفقیت ارسال شد. Message ID: {sent.message_id if sent else 'N/A'}")
+                if sent:
+                    db.update_challenge_message(bet_id, sent.message_id, sent.chat.id)
+                    logger.info(f"✅ پیام با موفقیت ارسال شد. Message ID: {sent.message_id}")
                 
             except Exception as e:
                 error_msg = str(e)
@@ -1646,14 +1687,24 @@ def start_token_bot():
             _bot.reply_to(message, f"❌ خطا: {str(e)}", reply_markup=owner_keyboard())
 
     # ─── پردازش دکمه‌های شرط‌بندی جام جهانی ──────────────────────────────────
-    @_bot.callback_query_handler(func=lambda call: call.data.startswith('bet_'))
-    def callback_bet(call):
+    @_bot.callback_query_handler(func=lambda call: call.data.startswith('bet_wc_'))
+    def callback_wc_bet(call):
         try:
-            selected_team = call.data.split('_')[1]
+            parts = call.data.split('_')
+            if len(parts) < 4:
+                _bot.answer_callback_query(call.id, "❌ لینک نامعتبر.", show_alert=True)
+                return
             
-            bet = db.get_active_worldcup_bet(1)
+            bet_id = int(parts[2])
+            selected_team = parts[3]
+            
+            bet = db.get_bet_game(bet_id)
             if not bet:
                 _bot.answer_callback_query(call.id, "❌ این چالش منقضی شده است.", show_alert=True)
+                return
+            
+            if bet.get('is_finished', False):
+                _bot.answer_callback_query(call.id, "❌ این مسابقه به پایان رسیده است.", show_alert=True)
                 return
             
             tg_id = call.from_user.id
@@ -1663,7 +1714,7 @@ def start_token_bot():
                 _bot.answer_callback_query(call.id, "❌ ابتدا در پنل ثبت‌نام کنید.", show_alert=True)
                 return
             
-            _waiting_for_bet_amount[tg_id] = (bet['id'], selected_team)
+            _waiting_for_bet_amount[tg_id] = (bet_id, selected_team)
             
             msg = _bot.send_message(
                 call.message.chat.id,
@@ -1675,14 +1726,14 @@ def start_token_bot():
                 reply_to_message_id=call.message.message_id
             )
             
-            _bot.register_next_step_handler(msg, process_bet_amount, bet['id'], tg_id, selected_team)
+            _bot.register_next_step_handler(msg, process_wc_bet_amount, bet_id, tg_id, selected_team)
             _bot.answer_callback_query(call.id, "✅ انتخاب ثبت شد!")
             
         except Exception as e:
-            logger.error(f"❌ callback_bet error: {e}")
+            logger.error(f"❌ callback_wc_bet error: {e}")
             _bot.answer_callback_query(call.id, f"❌ خطا: {str(e)}", show_alert=True)
 
-    def process_bet_amount(message, bet_id, user_tg_id, selected_team):
+    def process_wc_bet_amount(message, bet_id, user_tg_id, selected_team):
         try:
             try:
                 amount = int(message.text.strip())
@@ -1725,7 +1776,7 @@ def start_token_bot():
             )
             
         except Exception as e:
-            logger.error(f"❌ process_bet_amount error: {e}")
+            logger.error(f"❌ process_wc_bet_amount error: {e}")
             _bot.reply_to(message, f"❌ خطا: {str(e)}")
 
     # ─── اعلام برنده جام جهانی ──────────────────────────────────────────────
@@ -1919,10 +1970,8 @@ def start_token_bot():
                 _bot.reply_to(message, f"❌ موجودی ناکافی!\n💎 موجودی شما: {balance} الماس\n📊 نیاز: {bet_amount} الماس")
                 return
             
-            # کسر الماس از بازیکن اول
             db.deduct_tokens(account['id'], bet_amount)
             
-            # ایجاد دکمه با شناسه یکتا
             import time
             markup = types.InlineKeyboardMarkup(row_width=1)
             markup.add(types.InlineKeyboardButton("🎲 شرکت در قرعه‌کشی", callback_data=f"join_bet_{chat_id}_{int(time.time())}"))
@@ -2023,55 +2072,6 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در callback_join_bet: {e}")
             _bot.answer_callback_query(call.id, f"❌ خطا: {str(e)}", show_alert=True)
-
-    # ─── پاک‌سازی خودکار شرط‌بندی‌های منقضی شده ──────────────────────────────────
-    def clean_expired_bets():
-        try:
-            expired_games = db.get_expired_bet_games()
-            for game in expired_games:
-                db.expire_bet_game(game['id'])
-                
-                account = db.get_account_by_tg_id(game['player1_id'])
-                if account:
-                    db.add_tokens(account['id'], game['bet_amount'])
-                
-                try:
-                    _bot.send_message(
-                        game['chat_id'],
-                        f"⏰ **بازی منقضی شد!**\n\n"
-                        f"شرط‌بندی با مبلغ <b>{game['bet_amount']}</b> الماس\n"
-                        f"پس از ۱ ساعت حریفی پیدا نشد.\n"
-                        f"💎 الماس به بازیکن اول برگشت داده شد."
-                    )
-                    
-                    try:
-                        _bot.edit_message_reply_markup(
-                            chat_id=game['chat_id'],
-                            message_id=game['message_id'],
-                            reply_markup=None
-                        )
-                    except:
-                        pass
-                        
-                except Exception as e:
-                    logger.error(f"❌ خطا در ارسال پیام انقضا: {e}")
-                    
-        except Exception as e:
-            logger.error(f"❌ خطا در clean_expired_bets: {e}")
-
-    # ─── تایمر پاک‌سازی خودکار ──────────────────────────────────────────────────
-    def start_cleanup_timer():
-        def cleanup_loop():
-            while True:
-                time.sleep(300)
-                try:
-                    clean_expired_bets()
-                except Exception as e:
-                    logger.error(f"❌ خطا در cleanup_loop: {e}")
-        
-        t = threading.Thread(target=cleanup_loop, daemon=True)
-        t.start()
-        logger.info("✅ تایمر پاک‌سازی شرط‌بندی‌ها شروع شد (هر ۵ دقیقه)")
 
     # ─── پاسخ به دستور انتقال الماس ──────────────────────────────────────────────
     @_bot.message_handler(func=lambda m: m.text and m.text.strip().startswith("انتقال"))
@@ -2184,15 +2184,18 @@ def start_token_bot():
         import time as _t
         while True:
             try:
-                _bot.infinity_polling(timeout=30, long_polling_timeout=25, 
-                                      restart_on_change=False, skip_pending=True)
+                _bot.infinity_polling(
+                    timeout=20, 
+                    long_polling_timeout=15, 
+                    restart_on_change=False, 
+                    skip_pending=True,
+                    allowed_updates=['message', 'callback_query']
+                )
             except Exception as e:
-                if "409" in str(e):
+                error_msg = str(e)
+                if "Conflict" in error_msg or "409" in error_msg:
+                    logger.warning("⚠️ Conflict در polling، 10 ثانیه صبر...")
                     _t.sleep(10)
-                    try:
-                        _bot.delete_webhook(drop_pending_updates=True)
-                    except:
-                        pass
                 else:
                     logger.error(f"❌ خطا در polling: {e}")
                     _t.sleep(5)
