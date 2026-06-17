@@ -43,7 +43,10 @@ from database_supabase import (
     get_math_challenge as supa_get_math_challenge,
     solve_math_challenge as supa_solve_math_challenge,
     create_worldcup_bet as supa_create_worldcup_bet,
+    update_challenge_message as supa_update_challenge_message,
     get_active_worldcup_bet as supa_get_active_worldcup_bet,
+    get_all_active_worldcup_bets as supa_get_all_active_worldcup_bets,
+    get_worldcup_bet_by_message as supa_get_worldcup_bet_by_message,
     place_bet as supa_place_bet,
     get_bet_users as supa_get_bet_users,
     finish_worldcup_bet as supa_finish_worldcup_bet,
@@ -238,8 +241,17 @@ def solve_math_challenge(challenge_id: int):
 def create_worldcup_bet(owner_id: int, team1: str, team2: str, match_time: str, photo_file_id: str = None):
     return supa_create_worldcup_bet(owner_id, team1, team2, match_time, photo_file_id)
 
+def update_challenge_message(challenge_id: int, message_id: int, chat_id: int):
+    return supa_update_challenge_message(challenge_id, message_id, chat_id)
+
 def get_active_worldcup_bet(owner_id: int):
     return supa_get_active_worldcup_bet(owner_id)
+
+def get_all_active_worldcup_bets(owner_id: int):
+    return supa_get_all_active_worldcup_bets(owner_id)
+
+def get_worldcup_bet_by_message(message_id: int, chat_id: int):
+    return supa_get_worldcup_bet_by_message(message_id, chat_id)
 
 def place_bet(bet_id: int, user_tg_id: int, selected_team: str, bet_amount: int):
     return supa_place_bet(bet_id, user_tg_id, selected_team, bet_amount)
@@ -324,7 +336,9 @@ __all__ = [
     
     # چالش‌ها
     'create_math_challenge', 'get_math_challenge', 'solve_math_challenge',
-    'create_worldcup_bet', 'get_active_worldcup_bet', 'place_bet',
+    'create_worldcup_bet', 'update_challenge_message',
+    'get_active_worldcup_bet', 'get_all_active_worldcup_bets',
+    'get_worldcup_bet_by_message', 'place_bet',
     'get_bet_users', 'finish_worldcup_bet',
     'get_challenge_settings', 'update_challenge_settings',
     
