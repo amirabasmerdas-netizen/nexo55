@@ -53,8 +53,13 @@ from database_supabase import (
     create_bet_game as supa_create_bet_game,
     join_bet_game as supa_join_bet_game,
     get_active_bet_game as supa_get_active_bet_game,
+    get_all_active_bet_games as supa_get_all_active_bet_games,
+    get_bet_game_by_message as supa_get_bet_game_by_message,
     finish_bet_game as supa_finish_bet_game,
+    expire_bet_game as supa_expire_bet_game,
     get_bet_game as supa_get_bet_game,
+    get_expired_bet_games as supa_get_expired_bet_games,
+    transfer_tokens as supa_transfer_tokens,
     SETTING_DEFAULTS,
     _hash_pw,
 )
@@ -261,11 +266,26 @@ def join_bet_game(game_id: int, player2_id: int):
 def get_active_bet_game(chat_id: int):
     return supa_get_active_bet_game(chat_id)
 
+def get_all_active_bet_games(chat_id: int):
+    return supa_get_all_active_bet_games(chat_id)
+
+def get_bet_game_by_message(chat_id: int, message_id: int):
+    return supa_get_bet_game_by_message(chat_id, message_id)
+
 def finish_bet_game(game_id: int, winner_id: int):
     return supa_finish_bet_game(game_id, winner_id)
 
+def expire_bet_game(game_id: int):
+    return supa_expire_bet_game(game_id)
+
 def get_bet_game(game_id: int):
     return supa_get_bet_game(game_id)
+
+def get_expired_bet_games():
+    return supa_get_expired_bet_games()
+
+def transfer_tokens(from_owner_id: int, to_tg_id: int, amount: int) -> bool:
+    return supa_transfer_tokens(from_owner_id, to_tg_id, amount)
 
 # ─── صادرات ────────────────────────────────────────────────────────────────────
 __all__ = [
@@ -310,5 +330,7 @@ __all__ = [
     
     # شرط‌بندی دو نفره
     'create_bet_game', 'join_bet_game', 'get_active_bet_game',
-    'finish_bet_game', 'get_bet_game',
+    'get_all_active_bet_games', 'get_bet_game_by_message',
+    'finish_bet_game', 'expire_bet_game', 'get_bet_game',
+    'get_expired_bet_games', 'transfer_tokens',
 ]
