@@ -5,6 +5,7 @@ import database as db
 import db_cache as cache
 import config
 import datetime
+import database_supabase as db
 
 _bot = None
 BOT_USERNAME = None
