@@ -3,6 +3,7 @@
 # ══════════════════════════════════════════════════════════════════════════════
 
 import os, json, hashlib, datetime, psycopg2, psycopg2.extras, psycopg2.pool, time, threading
+import bcrypt
 from typing import Optional, Dict, List, Any
 from config import DATABASE_URL
 
@@ -112,7 +113,21 @@ def execute_query(query: str, params: tuple = None, fetch_one: bool = False, fet
         if conn: return_conn(conn)
 
 def _hash_pw(password: str) -> str:
-    return hashlib.sha256(password.encode()).hexdigest()
+    """هش رمز عبور با bcrypt (با salt تصادفی)."""
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+
+def _verify_pw(password: str, stored_hash: str) -> bool:
+    """تأیید رمز عبور — با پشتیبانی از هش‌های قدیمی SHA-256."""
+    try:
+        # ابتدا bcrypt را امتحان می‌کنیم (هش‌های جدید)
+        if stored_hash.startswith("$2"):
+            return bcrypt.checkpw(password.encode(), stored_hash.encode())
+        # فالبک برای هش‌های قدیمی SHA-256 (migration)
+        old_hash = hashlib.sha256(password.encode()).hexdigest()
+        return old_hash == stored_hash
+    except Exception:
+        return False
 
 def init_tables():
     try:
@@ -246,9 +261,23 @@ def verify_account(username: str, password: str) -> Optional[int]:
     try:
         result = execute_query("SELECT id, password_hash FROM amel_accounts WHERE username = %s",
             (username.strip(),), fetch_one=True)
-        if result and result['password_hash'] == _hash_pw(password):
-            return result['id']
-        return None
+        if not result:
+            return None
+        if not _verify_pw(password, result['password_hash']):
+            return None
+        owner_id = result['id']
+        # اگر هش قدیمی SHA-256 بود، به bcrypt ارتقا بده
+        if not result['password_hash'].startswith("$2"):
+            new_hash = _hash_pw(password)
+            try:
+                execute_query(
+                    "UPDATE amel_accounts SET password_hash = %s WHERE id = %s",
+                    (new_hash, owner_id)
+                )
+                invalidate_cache(f"account_{owner_id}")
+            except Exception:
+                pass
+        return owner_id
     except Exception as e:
         print(f"❌ verify_account error: {e}")
         return None
