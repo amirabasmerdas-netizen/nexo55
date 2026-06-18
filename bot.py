@@ -14,18 +14,36 @@ from texts import ENEMY_REPLIES, FRIEND_REPLIES
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-FONTS = {
-    "0": lambda t: t,
-    "1": lambda t: _convert_font(t, "𝗔𝗕𝗗𝗘𝗙𝗚𝗛𝗜𝗞𝗟𝗠𝗡𝗢𝗤𝗥𝗦𝗧𝗩𝗪𝗫𝗬𝗭𝗮𝗰𝗲𝗳𝗴𝗵𝗷𝗸𝗹𝗺𝗼𝗽𝗿𝘁𝘂𝘄𝘅𝘆𝘇"),
-    "2": lambda t: _convert_font(t, "𝘈𝘉𝘋𝘌𝘍𝘎𝘐𝘑𝘒𝘓𝘔𝘕𝘖𝘘𝘙𝘛𝘜𝘝𝘞𝘠𝘡𝘢𝘣𝘥𝘦𝘧𝘨𝘪𝘫𝘭𝘮𝘯𝘰𝘲𝘳𝘵𝘶𝘷𝘸𝘺𝘻"),
-    "3": lambda t: _convert_font(t, "𝙰𝙱𝙳𝙴𝙶𝙷𝙸𝙹𝙺𝙼𝙽𝙿𝚁𝚂𝚃𝚄𝚅𝚇𝚈𝚉𝚊𝚋𝚌𝚎𝚏𝚐𝚑𝚓𝚔𝚕𝚖𝚗𝚙𝚚𝚜𝚞𝚟𝚡𝚣"),
-    "4": lambda t: _convert_font(t, "ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｓｔｕｖｗｘｙ"),
-    "5": lambda t: _convert_font(t, "𝐀𝐁𝐃𝐄𝐅𝐆𝐈𝐉𝐋𝐌𝐍𝐎𝐏𝐐𝐒𝐓𝐕𝐖𝐗𝐘𝐙𝐚𝐛𝐝𝐞𝐟𝐠𝐡𝐣𝐤𝐥𝐦𝐧𝐩𝐪𝐫𝐬𝐮𝐯𝐱𝐲𝐳"),
-    "6": lambda t: _convert_font(t, "𝒜ℬ𝒞𝒟ℰℱℋℐ𝒥𝒦ℒℳ𝒩𝒪𝒫𝒬ℛ𝒮𝒯𝒱𝒲𝒳𝒴𝒶𝒷𝒹ℯℊ𝒽𝒿𝓀𝓂𝓃ℴ𝓅𝓆𝓇𝓈𝓊𝓋𝓍𝓎𝓏"),
-    "7": lambda t: "".join(c + "\u0336" for c in t),
-    "8": lambda t: "".join(c + "\u0332" for c in t),
+def _make_font_table(base_upper: int, base_lower: int) -> dict:
+    """جدول تبدیل ASCII به Unicode block با code points صحیح."""
+    table = {}
+    for i, ch in enumerate('ABCDEFGHIJKLMNOPQRSTUVWXYZ'):
+        table[ord(ch)] = chr(base_upper + i)
+    for i, ch in enumerate('abcdefghijklmnopqrstuvwxyz'):
+        table[ord(ch)] = chr(base_lower + i)
+    return table
+
+_FONT_TABLES = {
+    '1': _make_font_table(0x1D5D4, 0x1D5EE),  # Bold Sans-Serif
+    '2': _make_font_table(0x1D608, 0x1D622),  # Italic Sans-Serif
+    '3': _make_font_table(0x1D670, 0x1D68A),  # Monospace
+    '4': _make_font_table(0xFF21,  0xFF41),   # Fullwidth
+    '5': _make_font_table(0x1D400, 0x1D41A),  # Bold Serif
+    '6': _make_font_table(0x1D4D0, 0x1D4EA),  # Bold Script
 }
-_ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+
+FONTS = {
+    '0': lambda t: t,
+    '1': lambda t: t.translate(_FONT_TABLES['1']),
+    '2': lambda t: t.translate(_FONT_TABLES['2']),
+    '3': lambda t: t.translate(_FONT_TABLES['3']),
+    '4': lambda t: t.translate(_FONT_TABLES['4']),
+    '5': lambda t: t.translate(_FONT_TABLES['5']),
+    '6': lambda t: t.translate(_FONT_TABLES['6']),
+    '7': lambda t: ''.join(c + '̶' for c in t),
+    '8': lambda t: ''.join(c + '̲' for c in t),
+}
+_ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
 LINK_PATTERN = re.compile(r"(https?://\S+|t\.me/\S+|telegram\.me/\S+|www\.\S+)", re.IGNORECASE)
 
 _last_secretary_reply = {}
@@ -148,7 +166,6 @@ class BotManager:
                         logger.warning(f"⚠️ [{owner_id}] اتصال برقرار نشد، تلاش مجدد...")
                         await asyncio.sleep(5)
                         continue
-                    await cl.start(phone=lambda: None, bot_token=lambda: None)
                 except Exception as e:
                     error_msg = str(e).lower()
                     logger.error(f"❌ [{owner_id}] خطا در اتصال: {e}")
