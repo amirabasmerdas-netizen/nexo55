@@ -1,11 +1,12 @@
 # ══════════════════════════════════════════════════════════════════════════════
-# app.py - نسخه کامل با همه قابلیت‌ها و رفع خطاها
+# app.py - نسخه کامل با رفع خطای ثبت‌نام و اصلاح حذف سلف
 # ══════════════════════════════════════════════════════════════════════════════
 
 import asyncio
 import os
 import threading
 import time as _time
+import logging
 from functools import wraps
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from telethon import TelegramClient
@@ -19,6 +20,13 @@ from telethon.errors import (
 import database as db
 import db_cache as cache
 import config
+
+# ─── تنظیم لاگ ──────────────────────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # ─── Flask App ──────────────────────────────────────────────────────────────
 template_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates')
@@ -41,7 +49,7 @@ def server_error(e):
 
 @app.errorhandler(Exception)
 def unhandled_exception(e):
-    print(f"❌ خطای غیرمنتظره: {e}")
+    logger.error(f"❌ خطای غیرمنتظره: {e}")
     return jsonify({"ok": False, "error": f"خطای غیرمنتظره: {str(e)}"}), 500
 
 # ─── Event Loop برای Telethon ───────────────────────────────────────────────
@@ -151,46 +159,85 @@ def register():
         return redirect(url_for("index"))
     
     if request.method == "POST":
+        logger.info("📝 درخواست ثبت‌نام دریافت شد")
+        
         if request.is_json:
             data = request.json
+            logger.info(f"📝 داده‌های JSON: {data}")
         else:
             data = request.form
+            logger.info(f"📝 داده‌های Form: {data}")
         
         username = data.get("username", "").strip()
         password = data.get("password", "").strip()
         
-        if not username or not password:
-            error_msg = "یوزرنیم و رمز الزامی هستند"
+        logger.info(f"👤 تلاش برای ثبت‌نام با یوزرنیم: {username}")
+        
+        # ─── اعتبارسنجی ────────────────────────────────────────────────────
+        if not username:
+            error_msg = "یوزرنیم الزامی است"
+            logger.warning(f"❌ ثبت‌نام ناموفق: {error_msg}")
+            if request.is_json:
+                return jsonify({"ok": False, "error": error_msg}), 400
+            return render_template("register.html", error=error_msg)
+        
+        if not password:
+            error_msg = "رمز عبور الزامی است"
+            logger.warning(f"❌ ثبت‌نام ناموفق: {error_msg}")
             if request.is_json:
                 return jsonify({"ok": False, "error": error_msg}), 400
             return render_template("register.html", error=error_msg)
         
         if len(username) < 3:
             error_msg = "یوزرنیم باید حداقل ۳ کاراکتر باشد"
+            logger.warning(f"❌ ثبت‌نام ناموفق: {error_msg}")
             if request.is_json:
                 return jsonify({"ok": False, "error": error_msg}), 400
             return render_template("register.html", error=error_msg)
         
         if len(password) < 6:
-            error_msg = "رمز باید حداقل ۶ کاراکتر باشد"
+            error_msg = "رمز عبور باید حداقل ۶ کاراکتر باشد"
+            logger.warning(f"❌ ثبت‌نام ناموفق: {error_msg}")
             if request.is_json:
                 return jsonify({"ok": False, "error": error_msg}), 400
             return render_template("register.html", error=error_msg)
         
-        # ✅ اصلاح: استفاده از username به جای name
-        oid = db.create_account(username, password)
-        if oid is None:
-            error_msg = "این یوزرنیم قبلاً ثبت شده"
+        # ─── بررسی تکراری بودن ────────────────────────────────────────────
+        try:
+            existing = db.get_account_by_username(username)
+            if existing:
+                error_msg = "این یوزرنیم قبلاً ثبت شده است"
+                logger.warning(f"❌ ثبت‌نام ناموفق: {error_msg}")
+                if request.is_json:
+                    return jsonify({"ok": False, "error": error_msg}), 409
+                return render_template("register.html", error=error_msg)
+        except Exception as e:
+            logger.error(f"❌ خطا در بررسی تکراری بودن: {e}")
+        
+        # ─── ایجاد حساب ────────────────────────────────────────────────────
+        try:
+            oid = db.create_account(username, password)
+            if oid is None:
+                error_msg = "خطا در ایجاد حساب. لطفاً دوباره تلاش کنید."
+                logger.error(f"❌ ثبت‌نام ناموفق: {error_msg}")
+                if request.is_json:
+                    return jsonify({"ok": False, "error": error_msg}), 500
+                return render_template("register.html", error=error_msg)
+            
+            logger.info(f"✅ حساب کاربری با ID {oid} ایجاد شد")
+            db.init_user_settings(oid)
+            session["owner_id"] = oid
+            
             if request.is_json:
-                return jsonify({"ok": False, "error": error_msg}), 409
+                return jsonify({"ok": True, "message": "ثبت‌نام با موفقیت انجام شد"})
+            return redirect(url_for("index"))
+            
+        except Exception as e:
+            error_msg = f"خطا در ثبت‌نام: {str(e)}"
+            logger.error(f"❌ {error_msg}")
+            if request.is_json:
+                return jsonify({"ok": False, "error": error_msg}), 500
             return render_template("register.html", error=error_msg)
-        
-        db.init_user_settings(oid)
-        session["owner_id"] = oid
-        
-        if request.is_json:
-            return jsonify({"ok": True})
-        return redirect(url_for("index"))
     
     return render_template("register.html")
 
@@ -370,39 +417,46 @@ def tg_logout():
     db.set_setting(oid, "logged_in", "0")
     return jsonify({"ok": True})
 
-# ─── API: حذف کامل سلف ──────────────────────────────────────────────────────
+# ─── API: حذف سلف (فقط خود سلف) ────────────────────────────────────────────
 @app.route("/api/remove_session", methods=["POST"])
 @login_required
 def remove_session():
     """
-    حذف کامل سشن و خارج کردن کاربر از سلف
-    این کار باعث می‌شود کاربر از حساب تلگرام خارج شود
-    و تمام داده‌های سشن پاک شود
+    حذف سلف کاربر - فقط سشن این کاربر حذف می‌شود
+    سایر سشن‌ها و کاربران تحت تأثیر قرار نمی‌گیرند
     """
     oid = owner_id()
     
     try:
-        # 1. توقف سلف‌بات اگر در حال اجراست
-        from bot import bot_manager
-        bot_manager.stop(oid)
-    except:
-        pass
-    
-    try:
-        # 2. حذف سشن از دیتابیس
+        logger.info(f"🗑️ درخواست حذف سلف برای کاربر {oid}")
+        
+        # 1. توقف سلف‌بات این کاربر
+        try:
+            from bot import bot_manager
+            bot_manager.stop(oid)
+            logger.info(f"✅ سلف‌بات کاربر {oid} متوقف شد")
+        except Exception as e:
+            logger.warning(f"⚠️ خطا در توقف سلف‌بات: {e}")
+        
+        # 2. حذف سشن این کاربر از دیتابیس
         db.delete_session(oid)
+        logger.info(f"✅ سشن کاربر {oid} حذف شد")
         
-        # 3. غیرفعال کردن وضعیت لاگین
+        # 3. غیرفعال کردن وضعیت لاگین این کاربر
         db.set_setting(oid, "logged_in", "0")
+        logger.info(f"✅ وضعیت لاگین کاربر {oid} غیرفعال شد")
         
-        # 4. غیرفعال کردن سلف
+        # 4. غیرفعال کردن سلف این کاربر
         db.set_setting(oid, "self_bot_active", "0")
+        logger.info(f"✅ سلف کاربر {oid} غیرفعال شد")
         
         return jsonify({
             "ok": True,
             "message": "✅ سلف با موفقیت حذف شد!\nشما از حساب تلگرام خارج شدید."
         })
+        
     except Exception as e:
+        logger.error(f"❌ خطا در حذف سلف کاربر {oid}: {e}")
         return jsonify({
             "ok": False,
             "error": f"خطا در حذف سلف: {str(e)}"
@@ -780,11 +834,9 @@ def get_lotteries():
     if not account or account.get("telegram_user_id") != config.OWNER_TG_ID:
         return jsonify({"ok": False, "error": "فقط مالک"}), 403
     
-    # دریافت قرعه‌کشی‌های فعال
     active_lotteries = []
     try:
-        # این تابع باید در database_supabase.py اضافه شود
-        # فعلاً یک لیست خالی برمی‌گردانیم
+        # دریافت قرعه‌کشی‌های فعال
         pass
     except:
         pass
