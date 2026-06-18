@@ -1,4 +1,6 @@
 import os
+import secrets
+import warnings
 from dotenv import load_dotenv
 import re
 
@@ -10,7 +12,17 @@ API_HASH = os.environ.get("API_HASH", "")
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 
 # ─── سرور ──────────────────────────────────────────────────────────────────
-SECRET_KEY = os.environ.get("SECRET_KEY", "amel_self55_secret_key_change_me")
+SECRET_KEY = os.environ.get("SECRET_KEY", "")
+if not SECRET_KEY:
+    SECRET_KEY = secrets.token_hex(32)
+    warnings.warn(
+        "⚠️  SECRET_KEY در محیط تنظیم نشده — یک کلید تصادفی موقت ساخته شد. "
+        "پس از راه‌اندازی مجدد، تمام session‌های کاربران باطل می‌شوند. "
+        "حتماً SECRET_KEY را در متغیرهای محیطی تنظیم کنید.",
+        RuntimeWarning,
+        stacklevel=2,
+    )
+
 PORT = int(os.environ.get("PORT", 5000))
 SITE_URL = os.environ.get("SITE_URL", "")
 
@@ -24,13 +36,9 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 # ✅ استخراج صحیح SUPABASE_URL از DATABASE_URL
 if DATABASE_URL:
-    # postgresql://postgres.vijfkltyashuzhqcecff:Amirabas00v89%40@aws-0-eu-west-1.pooler.supabase.com:6543/postgres
     match = re.search(r'postgresql://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)', DATABASE_URL)
     if match:
         user, password, host, port, dbname = match.groups()
-        # استخراج Project ID از host
-        # host: aws-0-eu-west-1.pooler.supabase.com
-        # Project ID: vijfkltyashuzhqcecff (از user)
         project_id = user.split('.')[-1] if '.' in user else user
         SUPABASE_URL = f"https://{project_id}.supabase.co"
         print(f"✅ استخراج SUPABASE_URL: {SUPABASE_URL}")
