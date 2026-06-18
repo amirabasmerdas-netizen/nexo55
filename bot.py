@@ -34,8 +34,8 @@ LINK_PATTERN = re.compile(
 # ─── سیستم محدودیت زمانی برای منشی و دوست ────────────────────────────────────
 _last_secretary_reply = {}  # {chat_id: timestamp}
 _last_friend_reply = {}     # {sender_id: timestamp}
-SECRETARY_COOLDOWN = 86400  # 24 ساعت
-FRIEND_COOLDOWN = 3600      # 1 ساعت
+SECRETARY_COOLDOWN = 1000  # 24 ساعت
+FRIEND_COOLDOWN = 36      # 1 ساعت
 
 
 def _convert_font(text, chars):
@@ -236,14 +236,16 @@ def _register_handlers(cl: TelegramClient, owner_id: int, entry: dict):
             if me.username and me.username.lower() in text.lower():
                 is_tagged = True
 
-        # ✅ اگر در گروه است و تگ نشده، فقط کارهای خودکار را انجام بده
+        # ✅ اگر در گروه است و تگ نشده، فقط کارهای خودکار + پاسخ دشمن را انجام بده
         if not event.is_private and not is_tagged:
+            # سین خودکار
             if db.get_setting(owner_id, "auto_seen_active") == "1":
                 try:
                     await cl.send_read_acknowledge(chat_id, msg)
                 except Exception:
                     pass
             
+            # ذخیره خودکار مدیا
             if db.get_setting(owner_id, "auto_save_media") == "1" and msg.media:
                 try:
                     media_dir = f"saved_media/{owner_id}"
@@ -251,6 +253,29 @@ def _register_handlers(cl: TelegramClient, owner_id: int, entry: dict):
                     await cl.download_media(msg, file=media_dir + "/")
                 except Exception:
                     pass
+            
+            # ✅ پاسخ به دشمن در گروه (حتی بدون تگ)
+            if db.get_setting(owner_id, "enemy_reply_active") == "1" and db.is_enemy(owner_id, sender_id):
+                try:
+                    await event.reply(random.choice(ENEMY_REPLIES))
+                except Exception:
+                    pass
+            
+            # ✅ ری‌اکشن خودکار در گروه (حتی بدون تگ)
+            if db.get_setting(owner_id, "auto_reaction_active") == "1":
+                emoji = db.get_setting(owner_id, "auto_reaction_emoji", "❤️")
+                try:
+                    from telethon.tl.functions.messages import SendReactionRequest
+                    from telethon.tl.types import ReactionEmoji
+                    await cl(SendReactionRequest(
+                        peer=chat_id,
+                        msg_id=msg.id,
+                        reaction=[ReactionEmoji(emoticon=emoji)],
+                        big=False,
+                        add_to_recent=True
+                    ))
+                except Exception as e:
+                    print(f"⚠️ خطا در ری‌اکشن گروه: {e}")
             return
 
         if db.is_silent_chat(owner_id, chat_id) or db.is_silent_user(owner_id, sender_id):
@@ -301,7 +326,7 @@ def _register_handlers(cl: TelegramClient, owner_id: int, entry: dict):
                     pass
             return
 
-        # ✅ ری‌اکشن خودکار
+        # ✅ ری‌اکشن خودکار (پیوی)
         if db.get_setting(owner_id, "auto_reaction_active") == "1":
             emoji = db.get_setting(owner_id, "auto_reaction_emoji", "❤️")
             try:
@@ -329,7 +354,7 @@ def _register_handlers(cl: TelegramClient, owner_id: int, entry: dict):
                 except Exception:
                     pass
 
-        # پاسخ به دشمن
+        # پاسخ به دشمن (پیوی)
         if db.get_setting(owner_id, "enemy_reply_active") == "1" and db.is_enemy(owner_id, sender_id):
             try:
                 await event.reply(random.choice(ENEMY_REPLIES))
@@ -556,15 +581,60 @@ async def _handle_command(cl, event, text, owner_id, entry):
 
     # ─── فونت ────────────────────────────────────────────────────────────────
     elif text.startswith("فونت "):
-        font_id = text.split()[-1]
-        if font_id in FONTS:
-            ss("selected_font", font_id); await edit(f"🔤 فونت {font_id} انتخاب شد.\nاین فونت روی پیام‌ها و ساعت اعمال می‌شود.")
+        parts = text.split()
+        if len(parts) >= 2:
+            last_part = parts[-1]
+            if last_part.isdigit() and last_part in FONTS:
+                font_id = last_part
+                if len(parts) > 2:
+                    # استخراج متن (همه چیز بین "فونت " و شماره فونت)
+                    text_to_convert = text.replace("فونت ", "").replace(f" {font_id}", "")
+                    if text_to_convert:
+                        fn = FONTS.get(font_id, FONTS["0"])
+                        converted = fn(text_to_convert)
+                        # ذخیره فونت انتخابی
+                        ss("selected_font", font_id)
+                        await edit(f"🔤 {converted}\n\n✅ فونت {font_id} برای متن «{text_to_convert}» اعمال شد.")
+                    else:
+                        ss("selected_font", font_id)
+                        await edit(f"🔤 فونت {font_id} انتخاب شد.\nاین فونت روی پیام‌ها و ساعت اعمال می‌شود.")
+                else:
+                    ss("selected_font", font_id)
+                    await edit(f"🔤 فونت {font_id} انتخاب شد.\nاین فونت روی پیام‌ها و ساعت اعمال می‌شود.")
+            else:
+                await edit("❗ آخرین قسمت باید شماره فونت باشد (۰ تا ۸).")
         else:
-            await edit("❗ شماره فونت باید بین ۰ تا ۸ باشد.")
+            await edit("❗ فرمت: فونت [متن] [شماره] یا فونت [شماره]")
+    
     elif text == "لیست فونت":
-        samples = {"0":"متن عادی","1":"𝗕𝗼𝗹𝗱","2":"𝘐𝘵𝘢𝘭𝘪𝘤","3":"𝙼𝚘𝚗𝚘","4":"Ｆｕｌｌ","5":"𝐒𝐞𝐫𝐢𝐟","6":"𝒮𝒸𝓇𝒾𝓅𝓉","7":"S̶t̶r̶i̶k̶e̶","8":"U̲n̲d̲e̲r̲"}
-        lines = ["📝 فونت‌های موجود:\n"] + [f"فونت {k} — {v}" for k, v in samples.items()]
-        lines.append("\n💡 فونت انتخابی روی ساعت نام/بیو هم اعمال می‌شود!")
+        test_text = "امیر"
+        samples = {
+            "0": "متن عادی",
+            "1": "𝗕𝗼𝗹𝗱 𝗦𝗮𝗻𝘀", 
+            "2": "𝘐𝘵𝘢𝘭𝘪𝘤 𝘚𝘢𝘯𝘴",
+            "3": "𝙼𝚘𝚗𝚘𝚜𝚙𝚊𝚌𝚎",
+            "4": "Ｆｕｌｌｗｉｄｔｈ",
+            "5": "𝐒𝐞𝐫𝐢𝐟 𝐁𝐨𝐥𝐝",
+            "6": "𝒮𝒸𝓇𝒾𝓅𝓉",
+            "7": "S̶t̶r̶i̶k̶e̶t̶h̶r̶o̶u̶g̶h̶",
+            "8": "U̲n̲d̲e̲r̲l̲i̲n̲e̲"
+        }
+        
+        lines = ["📝 لیست فونت‌ها با نمونه:\n"]
+        lines.append("─" * 35)
+        
+        for k, v in samples.items():
+            fn = FONTS.get(k, FONTS["0"])
+            converted = fn(test_text)
+            lines.append(f"فونت {k} — {v}:")
+            lines.append(f"  `{converted}`")
+            lines.append("")
+        
+        lines.append("─" * 35)
+        lines.append("\n💡 استفاده: فونت [متن] [شماره]")
+        lines.append("مثال: `فونت امیر 3`")
+        lines.append("یا: `فونت 3` برای تنظیم فونت پیش‌فرض")
+        
         await edit("\n".join(lines))
 
     # ─── ساعت ────────────────────────────────────────────────────────────────
@@ -864,11 +934,12 @@ def _help_text():
 • توقف سیو
 
 🔹 فونت:
-• فونت [0-8] — تغییر فونت پیام‌ها و ساعت
+• فونت [متن] [شماره] — تبدیل متن به فونت دلخواه
+• فونت [شماره] — تغییر فونت پیش‌فرض
 • لیست فونت — نمایش نمونه‌ها
 
 💡 نکته: فونت انتخابی روی ساعت نام/بیو هم اعمال می‌شود!
-💡 نکته: در گروه‌ها فقط وقتی تگ شوید پاسخ می‌دهد!
+💡 نکته: در گروه‌ها پاسخ به دشمن و ری‌اکشن حتی بدون تگ کار می‌کند!
 💡 نکته: پاسخ به دوستان هر 1 ساعت یک بار!
 """
 
