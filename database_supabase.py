@@ -223,6 +223,11 @@ def init_tables():
 # ══════════════════════════════════════════════════════════════════════════════
 def create_account(username: str, password: str) -> Optional[int]:
     try:
+        # بررسی وجود یوزرنیم تکراری
+        existing = get_account_by_username(username)
+        if existing:
+            return None
+        
         result = execute_query(
             "INSERT INTO amel_accounts (username, password_hash, created_at) VALUES (%s, %s, %s) RETURNING id",
             (username.strip(), _hash_pw(password), datetime.datetime.now().isoformat()),
@@ -230,6 +235,7 @@ def create_account(username: str, password: str) -> Optional[int]:
         )
         if result:
             clear_cache()
+            invalidate_cache(f"account_username_{username}")
             return result['id']
         return None
     except Exception as e:
@@ -757,6 +763,21 @@ def transfer_tokens(from_owner_id: int, to_tg_id: int, amount: int) -> bool:
         return True
     except: return False
 
+def transfer_diamonds(from_id: int, to_id: int, amount: int):
+    if amount <= 0: return False, "❌ مقدار نامعتبر"
+    if from_id == to_id: return False, "❌ نمی‌توانید به خودتان انتقال دهید"
+    try:
+        _init_tokens(from_id)
+        _init_tokens(to_id)
+        balance = get_token_balance(from_id)
+        if balance < amount:
+            return False, f"❌ موجودی کافی نیست. موجودی: {balance}"
+        deduct_tokens(from_id, amount)
+        add_tokens(to_id, amount)
+        return True, f"✅ {amount} الماس انتقال یافت"
+    except Exception as e:
+        return False, f"❌ خطا: {e}"
+
 # ══════════════════════════════════════════════════════════════════════════════
 # 🆕 توابع جدید برای telegram_bot
 # ══════════════════════════════════════════════════════════════════════════════
@@ -841,21 +862,6 @@ def place_bet_v2(challenge_id: int, user_tg_id: int, owner_id: int, team_choice:
         return True, f"✅ شرط {bet_amount} الماس روی {team_choice} ثبت شد."
     except Exception as e:
         return False, f"❌ خطا: {str(e)}"
-
-def transfer_diamonds(from_id, to_id, amount):
-    if amount <= 0: return False, "❌ مقدار نامعتبر"
-    if from_id == to_id: return False, "❌ نمی‌توانید به خودتان انتقال دهید"
-    try:
-        _init_tokens(from_id)
-        _init_tokens(to_id)
-        balance = get_token_balance(from_id)
-        if balance < amount:
-            return False, f"❌ موجودی کافی نیست. موجودی: {balance}"
-        deduct_tokens(from_id, amount)
-        add_tokens(to_id, amount)
-        return True, f"✅ {amount} الماس انتقال یافت"
-    except Exception as e:
-        return False, f"❌ خطا: {e}"
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 🆕 قرعه‌کشی
