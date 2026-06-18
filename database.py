@@ -1,7 +1,6 @@
-"""
-database.py - Bridge بین دیتابیس‌های Supabase و SQLite
-این فایل تمام توابع دیتابیس را به صورت یکپارچه ارائه می‌دهد.
-"""
+# ══════════════════════════════════════════════════════════════════════════════
+# database.py - Bridge بین دیتابیس‌های Supabase و SQLite
+# ══════════════════════════════════════════════════════════════════════════════
 
 import hashlib
 import datetime
@@ -78,6 +77,17 @@ from database_supabase import (
     
     # انتقال الماس
     transfer_tokens as supa_transfer_tokens,
+    
+    # قرعه‌کشی
+    create_lottery as supa_create_lottery,
+    update_lottery_message as supa_update_lottery_message,
+    get_lottery as supa_get_lottery,
+    get_active_lottery_by_chat as supa_get_active_lottery_by_chat,
+    join_lottery as supa_join_lottery,
+    get_lottery_participants as supa_get_lottery_participants,
+    finish_lottery as supa_finish_lottery,
+    get_expired_lotteries as supa_get_expired_lotteries,
+    cancel_lottery as supa_cancel_lottery,
     
     # ثابت‌ها
     SETTING_DEFAULTS,
@@ -492,6 +502,54 @@ def transfer_tokens(from_owner_id: int, to_tg_id: int, amount: int) -> bool:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# 🎲 توابع قرعه‌کشی
+# ══════════════════════════════════════════════════════════════════════════════
+def create_lottery(chat_id, creator_tg_id, prize_amount, duration_minutes, entry_fee=1):
+    """ایجاد قرعه‌کشی جدید"""
+    return supa_create_lottery(chat_id, creator_tg_id, prize_amount, duration_minutes, entry_fee)
+
+
+def update_lottery_message(lottery_id, message_id):
+    """به‌روزرسانی پیام قرعه‌کشی"""
+    return supa_update_lottery_message(lottery_id, message_id)
+
+
+def get_lottery(lottery_id):
+    """دریافت اطلاعات قرعه‌کشی"""
+    return supa_get_lottery(lottery_id)
+
+
+def get_active_lottery_by_chat(chat_id):
+    """دریافت قرعه‌کشی فعال در چت"""
+    return supa_get_active_lottery_by_chat(chat_id)
+
+
+def join_lottery(lottery_id, user_tg_id, owner_id, entry_fee=None):
+    """شرکت در قرعه‌کشی"""
+    return supa_join_lottery(lottery_id, user_tg_id, owner_id, entry_fee)
+
+
+def get_lottery_participants(lottery_id):
+    """دریافت لیست شرکت‌کنندگان قرعه‌کشی"""
+    return supa_get_lottery_participants(lottery_id)
+
+
+def finish_lottery(lottery_id, winner_tg_id, winner_owner_id):
+    """پایان قرعه‌کشی"""
+    return supa_finish_lottery(lottery_id, winner_tg_id, winner_owner_id)
+
+
+def get_expired_lotteries():
+    """دریافت قرعه‌کشی‌های منقضی شده"""
+    return supa_get_expired_lotteries()
+
+
+def cancel_lottery(lottery_id):
+    """لغو قرعه‌کشی"""
+    return supa_cancel_lottery(lottery_id)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # صادرات
 # ══════════════════════════════════════════════════════════════════════════════
 __all__ = [
@@ -544,4 +602,15 @@ __all__ = [
     'get_all_active_bet_games', 'get_bet_game_by_message',
     'finish_bet_game', 'expire_bet_game', 'get_bet_game',
     'get_expired_bet_games', 'transfer_tokens',
+    
+    # قرعه‌کشی
+    'create_lottery',
+    'update_lottery_message',
+    'get_lottery',
+    'get_active_lottery_by_chat',
+    'join_lottery',
+    'get_lottery_participants',
+    'finish_lottery',
+    'get_expired_lotteries',
+    'cancel_lottery',
 ]
