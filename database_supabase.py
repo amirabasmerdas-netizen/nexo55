@@ -10,18 +10,16 @@ from typing import Optional, Dict, List, Any
 from config import DATABASE_URL
 import time
 import threading
-from contextlib import contextmanager
 
 # ─── Connection Pool ──────────────────────────────────────────────────────────
 _pool = None
 _pool_lock = threading.Lock()
 _pool_created = 0
-_POOL_MAX = 5  # کاهش تعداد اتصالات همزمان
-_POOL_MIN = 1
-_POOL_TIMEOUT = 60
+_POOL_MAX = 10
+_POOL_MIN = 2
+_POOL_TIMEOUT = 300
 
 def get_pool():
-    """دریافت connection pool با مدیریت خودکار"""
     global _pool, _pool_created
     
     with _pool_lock:
@@ -38,11 +36,11 @@ def get_pool():
                     _POOL_MIN, _POOL_MAX,
                     DATABASE_URL,
                     sslmode='require',
-                    connect_timeout=3,
+                    connect_timeout=5,
                     keepalives=1,
-                    keepalives_idle=10,
-                    keepalives_interval=5,
-                    keepalives_count=3,
+                    keepalives_idle=30,
+                    keepalives_interval=10,
+                    keepalives_count=5,
                     application_name='amel_self55'
                 )
                 _pool_created = now
@@ -52,75 +50,32 @@ def get_pool():
                 raise
     return _pool
 
-@contextmanager
-def get_connection():
-    """مدیریت خودکار اتصال با context manager"""
+def get_conn():
     pool = get_pool()
-    conn = None
     try:
         conn = pool.getconn()
         conn.autocommit = True
-        # تنظیم timeout برای کوئری‌ها
-        try:
-            cur = conn.cursor()
-            cur.execute("SET statement_timeout = '5s'")
-            cur.close()
-        except:
-            pass
-        yield conn
+        return conn
     except Exception as e:
-        if conn:
+        print(f"❌ خطا در دریافت اتصال: {e}")
+        raise
+
+def return_conn(conn):
+    if conn:
+        try:
+            pool = get_pool()
+            pool.putconn(conn)
+        except:
             try:
-                conn.rollback()
+                conn.close()
             except:
                 pass
-        raise
-    finally:
-        if conn:
-            try:
-                pool.putconn(conn)
-            except:
-                try:
-                    conn.close()
-                except:
-                    pass
 
-def execute_query(query: str, params: tuple = None, fetch_one: bool = False, fetch_all: bool = False):
-    """اجرای کوئری با مدیریت خودکار اتصال"""
-    with get_connection() as conn:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(query, params)
-            if fetch_one:
-                result = cur.fetchone()
-                return dict(result) if result else None
-            elif fetch_all:
-                result = cur.fetchall()
-                return [dict(row) for row in result] if result else []
-            return cur.rowcount
-
-def execute_batch(queries: List[tuple]) -> List[Any]:
-    """اجرای چند کوئری به صورت batch"""
-    if not queries:
-        return []
-    
-    with get_connection() as conn:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            results = []
-            for query, params in queries:
-                cur.execute(query, params)
-                if query.strip().upper().startswith("SELECT"):
-                    results.append(cur.fetchall())
-                else:
-                    results.append(cur.rowcount)
-            conn.commit()
-            return results
-
-# ─── کش حافظه با محدودیت ──────────────────────────────────────────────────────
+# ─── کش حافظه ──────────────────────────────────────────────────────────────
 _cache = {}
 _cache_time = {}
+_CACHE_TTL = 60
 _cache_lock = threading.Lock()
-_MAX_CACHE_SIZE = 200
-_CACHE_TTL = 30
 
 def clear_cache():
     with _cache_lock:
@@ -138,98 +93,80 @@ def invalidate_cache(pattern: str = None):
             _cache.clear()
             _cache_time.clear()
 
-def cached_query(key: str, query: str, params: tuple = None, fetch_one: bool = False, fetch_all: bool = False, ttl: int = 30):
-    """کش با محدودیت اندازه و TTL"""
+def cached_query(key: str, query: str, params: tuple = None, fetch_one: bool = False, fetch_all: bool = False, ttl: int = 60):
     now = time.time()
     cache_key = f"{key}:{str(params)}"
     
     with _cache_lock:
-        # بررسی کش
-        if cache_key in _cache:
-            if now - _cache_time.get(cache_key, 0) < ttl:
-                return _cache[cache_key]
-            else:
-                del _cache[cache_key]
-                del _cache_time[cache_key]
+        if cache_key in _cache and (now - _cache_time.get(cache_key, 0) < ttl):
+            return _cache[cache_key]
     
-    # اجرای کوئری
     result = execute_query(query, params, fetch_one, fetch_all)
     
     with _cache_lock:
-        # اگر کش پر است، قدیمی‌ترین را حذف کن
-        if len(_cache) >= _MAX_CACHE_SIZE:
-            oldest = min(_cache_time, key=_cache_time.get)
-            del _cache[oldest]
-            del _cache_time[oldest]
-        
         _cache[cache_key] = result
         _cache_time[cache_key] = now
     
     return result
 
-# ─── کش تنظیمات با محدودیت ──────────────────────────────────────────────────
-_settings_cache = {}
-_settings_cache_time = {}
-_settings_cache_lock = threading.Lock()
-_MAX_SETTINGS_CACHE = 100
-_SETTINGS_CACHE_TTL = 60
-
-def get_setting_cached(owner_id: int, key: str, default=None) -> str:
-    """دریافت تنظیمات با کش اختصاصی"""
-    cache_key = f"{owner_id}:{key}"
-    now = time.time()
-    
-    with _settings_cache_lock:
-        if cache_key in _settings_cache:
-            if now - _settings_cache_time.get(cache_key, 0) < _SETTINGS_CACHE_TTL:
-                return _settings_cache[cache_key]
-            else:
-                del _settings_cache[cache_key]
-                del _settings_cache_time[cache_key]
-        
-        # محدود کردن اندازه کش
-        if len(_settings_cache) >= _MAX_SETTINGS_CACHE:
-            oldest = min(_settings_cache_time, key=_settings_cache_time.get)
-            del _settings_cache[oldest]
-            del _settings_cache_time[oldest]
-    
-    # دریافت از دیتابیس
+def execute_query(query: str, params: tuple = None, fetch_one: bool = False, fetch_all: bool = False):
+    conn = None
+    cur = None
     try:
-        result = cached_query(
-            f"setting_{owner_id}_{key}",
-            "SELECT value FROM amel_settings WHERE owner_id = %s AND key = %s",
-            (owner_id, key),
-            fetch_one=True,
-            ttl=30
-        )
-        value = result['value'] if result else None
-    except Exception:
-        value = None
-    
-    if value is None:
-        default_val = SETTING_DEFAULTS.get(key, default)
-        value = str(default_val) if default_val is not None else ""
-    
-    with _settings_cache_lock:
-        _settings_cache[cache_key] = value
-        _settings_cache_time[cache_key] = now
-    
-    return value
+        conn = get_conn()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(query, params)
+        
+        if fetch_one:
+            result = cur.fetchone()
+            return dict(result) if result else None
+        elif fetch_all:
+            result = cur.fetchall()
+            return [dict(row) for row in result] if result else []
+        return cur.rowcount
+    except psycopg2.OperationalError as e:
+        print(f"❌ خطای اتصال به دیتابیس: {e}")
+        clear_cache()
+        raise
+    except Exception as e:
+        print(f"❌ خطای دیتابیس: {e}")
+        raise
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            return_conn(conn)
 
-def invalidate_settings_cache(owner_id: int = None, key: str = None):
-    """پاک کردن کش تنظیمات"""
-    with _settings_cache_lock:
-        if owner_id and key:
-            _settings_cache.pop(f"{owner_id}:{key}", None)
-            _settings_cache_time.pop(f"{owner_id}:{key}", None)
-        elif owner_id:
-            keys_to_remove = [k for k in _settings_cache.keys() if k.startswith(f"{owner_id}:")]
-            for k in keys_to_remove:
-                _settings_cache.pop(k, None)
-                _settings_cache_time.pop(k, None)
-        else:
-            _settings_cache.clear()
-            _settings_cache_time.clear()
+def execute_batch(queries: List[tuple]) -> List[Any]:
+    if not queries:
+        return []
+    
+    conn = None
+    cur = None
+    results = []
+    try:
+        conn = get_conn()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        
+        for query, params in queries:
+            cur.execute(query, params)
+            if query.strip().upper().startswith("SELECT"):
+                results.append(cur.fetchall())
+            else:
+                results.append(cur.rowcount)
+        
+        conn.commit()
+        return results
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        print(f"❌ execute_batch error: {e}")
+        raise
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            return_conn(conn)
 
 def _hash_pw(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
@@ -408,18 +345,6 @@ def init_tables():
     
     print("✅ جداول Supabase ایجاد/تأیید شدند!")
 
-# ─── تنظیمات پیش‌فرض ──────────────────────────────────────────────────────────
-SETTING_DEFAULTS = {
-    "self_bot_active": "0", "secretary_active": "0", "anti_delete_active": "0",
-    "anti_link_active": "0", "auto_seen_active": "0", "auto_reaction_active": "0",
-    "private_lock_active": "0", "enemy_reply_active": "0", "auto_save_media": "0",
-    "clock_name_active": "0", "clock_bio_active": "0", "selected_font": "0",
-    "secretary_message": "در حال حاضر در دسترس نیستم.", "auto_reaction_emoji": "❤️",
-    "spam_active": "0", "channel_save_active": "0", "spam_delay": "2",
-    "session_data": "", "logged_in": "0",
-    "_login_phone": "", "_login_phone_hash": "", "_login_partial_session": "",
-}
-
 # ─── حساب‌ها ──────────────────────────────────────────────────────────────────
 def create_account(username: str, password: str) -> Optional[int]:
     try:
@@ -435,7 +360,6 @@ def create_account(username: str, password: str) -> Optional[int]:
         )
         if result:
             clear_cache()
-            invalidate_settings_cache()
             return result['id']
         return None
     except Exception as e:
@@ -543,9 +467,47 @@ def get_telegram_id_by_owner(owner_id: int) -> Optional[int]:
         return None
 
 # ─── تنظیمات ──────────────────────────────────────────────────────────────────
+SETTING_DEFAULTS = {
+    "self_bot_active": "0", "secretary_active": "0", "anti_delete_active": "0",
+    "anti_link_active": "0", "auto_seen_active": "0", "auto_reaction_active": "0",
+    "private_lock_active": "0", "enemy_reply_active": "0", "auto_save_media": "0",
+    "clock_name_active": "0", "clock_bio_active": "0", "selected_font": "0",
+    "secretary_message": "در حال حاضر در دسترس نیستم.", "auto_reaction_emoji": "❤️",
+    "spam_active": "0", "channel_save_active": "0", "spam_delay": "2",
+    "session_data": "", "logged_in": "0",
+    "_login_phone": "", "_login_phone_hash": "", "_login_partial_session": "",
+}
+
+_settings_cache = {}
+_settings_cache_time = {}
+_SETTINGS_CACHE_TTL = 60
+
 def get_setting(owner_id: int, key: str, default=None) -> str:
-    """دریافت تنظیمات با کش"""
-    return get_setting_cached(owner_id, key, default)
+    cache_key = f"{owner_id}:{key}"
+    now = time.time()
+    
+    if cache_key in _settings_cache and (now - _settings_cache_time.get(cache_key, 0) < _SETTINGS_CACHE_TTL):
+        return _settings_cache[cache_key]
+    
+    try:
+        result = cached_query(
+            f"setting_{owner_id}_{key}",
+            "SELECT value FROM amel_settings WHERE owner_id = %s AND key = %s",
+            (owner_id, key),
+            fetch_one=True,
+            ttl=_SETTINGS_CACHE_TTL
+        )
+        if result:
+            _settings_cache[cache_key] = result['value']
+            _settings_cache_time[cache_key] = now
+            return result['value']
+    except Exception as e:
+        print(f"❌ get_setting error for {key}: {e}")
+    
+    default_val = SETTING_DEFAULTS.get(key, default)
+    _settings_cache[cache_key] = str(default_val) if default_val is not None else ""
+    _settings_cache_time[cache_key] = now
+    return _settings_cache[cache_key]
 
 def set_setting(owner_id: int, key: str, value):
     try:
@@ -559,8 +521,8 @@ def set_setting(owner_id: int, key: str, value):
         """
         execute_query(query, (owner_id, key, value_str))
         
-        # پاک کردن کش
-        invalidate_settings_cache(owner_id, key)
+        _settings_cache[f"{owner_id}:{key}"] = value_str
+        _settings_cache_time[f"{owner_id}:{key}"] = time.time()
         invalidate_cache(f"setting_{owner_id}_{key}")
     except Exception as e:
         print(f"❌ set_setting error for {key}: {e}")
@@ -941,4 +903,221 @@ def get_all_active_worldcup_bets(owner_id: int):
 def get_worldcup_bet_by_message(message_id: int, chat_id: int):
     try:
         return cached_query(
-            f"wc_bet_msg_{message_id}_{chat
+            f"wc_bet_msg_{message_id}_{chat_id}",
+            "SELECT * FROM amel_worldcup_bets WHERE message_id = %s AND chat_id = %s AND is_finished = FALSE",
+            (message_id, chat_id),
+            fetch_one=True,
+            ttl=5
+        )
+    except Exception as e:
+        print(f"❌ get_worldcup_bet_by_message error: {e}")
+        return None
+
+def place_bet(bet_id: int, user_tg_id: int, selected_team: str, bet_amount: int):
+    try:
+        query = """
+            INSERT INTO amel_user_bets (bet_id, user_tg_id, selected_team, bet_amount, created_at)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (bet_id, user_tg_id) DO UPDATE 
+            SET selected_team = EXCLUDED.selected_team, bet_amount = EXCLUDED.bet_amount
+        """
+        execute_query(query, (bet_id, user_tg_id, selected_team, bet_amount, datetime.datetime.now().isoformat()))
+        invalidate_cache(f"user_bets_{bet_id}")
+        return True
+    except Exception as e:
+        print(f"❌ place_bet error: {e}")
+        return False
+
+def get_bet_users(bet_id: int):
+    try:
+        return cached_query(
+            f"user_bets_{bet_id}",
+            "SELECT * FROM amel_user_bets WHERE bet_id = %s",
+            (bet_id,),
+            fetch_all=True,
+            ttl=10
+        ) or []
+    except Exception as e:
+        print(f"❌ get_bet_users error: {e}")
+        return []
+
+def finish_worldcup_bet(bet_id: int, winner: str):
+    try:
+        query = "UPDATE amel_worldcup_bets SET winner = %s, is_finished = TRUE WHERE id = %s"
+        execute_query(query, (winner, bet_id))
+        invalidate_cache("wc_bet_")
+        invalidate_cache(f"user_bets_{bet_id}")
+        return True
+    except Exception as e:
+        print(f"❌ finish_worldcup_bet error: {e}")
+        return False
+
+def get_challenge_settings(owner_id: int):
+    try:
+        result = cached_query(
+            f"challenge_settings_{owner_id}",
+            "SELECT * FROM amel_challenge_settings WHERE owner_id = %s",
+            (owner_id,),
+            fetch_one=True,
+            ttl=30
+        )
+        if not result:
+            query = """
+                INSERT INTO amel_challenge_settings (owner_id, math_challenge_active, worldcup_challenge_active, updated_at)
+                VALUES (%s, FALSE, FALSE, %s)
+                RETURNING *
+            """
+            result = execute_query(query, (owner_id, datetime.datetime.now().isoformat()), fetch_one=True)
+        return result if result else {"math_challenge_active": False, "worldcup_challenge_active": False}
+    except Exception as e:
+        print(f"❌ get_challenge_settings error: {e}")
+        return {"math_challenge_active": False, "worldcup_challenge_active": False}
+
+def update_challenge_settings(owner_id: int, key: str, value):
+    try:
+        check_query = "SELECT 1 FROM amel_challenge_settings WHERE owner_id = %s"
+        exists = execute_query(check_query, (owner_id,), fetch_one=True)
+        
+        if exists:
+            query = f"UPDATE amel_challenge_settings SET {key} = %s, updated_at = %s WHERE owner_id = %s"
+            execute_query(query, (value, datetime.datetime.now().isoformat(), owner_id))
+        else:
+            query = f"INSERT INTO amel_challenge_settings (owner_id, {key}, updated_at) VALUES (%s, %s, %s)"
+            execute_query(query, (owner_id, value, datetime.datetime.now().isoformat()))
+        
+        invalidate_cache(f"challenge_settings_{owner_id}")
+        return True
+    except Exception as e:
+        print(f"❌ update_challenge_settings error: {e}")
+        return False
+
+# ─── شرط‌بندی دو نفره ──────────────────────────────────────────────────────────
+def create_bet_game(owner_id: int, chat_id: int, player1_id: int, bet_amount: int, message_id: int = None):
+    try:
+        query = """
+            INSERT INTO amel_bet_games (owner_id, chat_id, player1_id, bet_amount, message_id, status, created_at)
+            VALUES (%s, %s, %s, %s, %s, 'waiting', %s)
+            RETURNING id
+        """
+        result = execute_query(query, (owner_id, chat_id, player1_id, bet_amount, message_id, datetime.datetime.now().isoformat()), fetch_one=True)
+        if result:
+            invalidate_cache(f"bet_games_{chat_id}")
+            return result['id']
+        return None
+    except Exception as e:
+        print(f"❌ create_bet_game error: {e}")
+        return None
+
+def join_bet_game(game_id: int, player2_id: int):
+    try:
+        query = "UPDATE amel_bet_games SET player2_id = %s, status = 'active' WHERE id = %s AND status = 'waiting'"
+        execute_query(query, (player2_id, game_id))
+        invalidate_cache("bet_games_")
+        return True
+    except Exception as e:
+        print(f"❌ join_bet_game error: {e}")
+        return False
+
+def get_all_active_bet_games(chat_id: int):
+    try:
+        return cached_query(
+            f"bet_games_{chat_id}",
+            "SELECT * FROM amel_bet_games WHERE chat_id = %s AND status IN ('waiting', 'active') ORDER BY created_at DESC",
+            (chat_id,),
+            fetch_all=True,
+            ttl=5
+        ) or []
+    except Exception as e:
+        print(f"❌ get_all_active_bet_games error: {e}")
+        return []
+
+def get_active_bet_game(chat_id: int):
+    games = get_all_active_bet_games(chat_id)
+    return games[0] if games else None
+
+def get_bet_game_by_message(chat_id: int, message_id: int):
+    try:
+        return cached_query(
+            f"bet_game_msg_{chat_id}_{message_id}",
+            "SELECT * FROM amel_bet_games WHERE chat_id = %s AND message_id = %s AND status IN ('waiting', 'active')",
+            (chat_id, message_id),
+            fetch_one=True,
+            ttl=5
+        )
+    except Exception as e:
+        print(f"❌ get_bet_game_by_message error: {e}")
+        return None
+
+def finish_bet_game(game_id: int, winner_id: int):
+    try:
+        query = "UPDATE amel_bet_games SET winner_id = %s, status = 'finished' WHERE id = %s"
+        execute_query(query, (winner_id, game_id))
+        invalidate_cache("bet_games_")
+        return True
+    except Exception as e:
+        print(f"❌ finish_bet_game error: {e}")
+        return False
+
+def expire_bet_game(game_id: int):
+    try:
+        query = "UPDATE amel_bet_games SET status = 'expired' WHERE id = %s AND status = 'waiting'"
+        execute_query(query, (game_id,))
+        invalidate_cache("bet_games_")
+        return True
+    except Exception as e:
+        print(f"❌ expire_bet_game error: {e}")
+        return False
+
+def get_bet_game(game_id: int):
+    try:
+        return cached_query(
+            f"bet_game_{game_id}",
+            "SELECT * FROM amel_bet_games WHERE id = %s",
+            (game_id,),
+            fetch_one=True,
+            ttl=30
+        )
+    except Exception as e:
+        print(f"❌ get_bet_game error: {e}")
+        return None
+
+def get_expired_bet_games():
+    try:
+        expire_time = (datetime.datetime.now() - datetime.timedelta(hours=1)).isoformat()
+        return cached_query(
+            "expired_bet_games",
+            "SELECT * FROM amel_bet_games WHERE status = 'waiting' AND created_at < %s",
+            (expire_time,),
+            fetch_all=True,
+            ttl=60
+        ) or []
+    except Exception as e:
+        print(f"❌ get_expired_bet_games error: {e}")
+        return []
+
+# ─── انتقال الماس ──────────────────────────────────────────────────────────────
+def transfer_tokens(from_owner_id: int, to_tg_id: int, amount: int) -> bool:
+    try:
+        balance = get_token_balance(from_owner_id)
+        if balance < amount:
+            return False
+        
+        to_account = get_account_by_tg_id(to_tg_id)
+        if not to_account:
+            return False
+        
+        deduct_tokens(from_owner_id, amount)
+        add_tokens(to_account['id'], amount)
+        
+        return True
+    except Exception as e:
+        print(f"❌ transfer_tokens error: {e}")
+        return False
+
+# ─── مقداردهی اولیه ──────────────────────────────────────────────────────────
+try:
+    init_tables()
+except Exception as e:
+    print(f"❌ خطا در ایجاد جداول: {e}")
+
+print("✅ database_supabase.py بارگذاری شد!")
