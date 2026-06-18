@@ -1,3 +1,7 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# bot.py - نسخه کامل با همه قابلیت‌ها
+# ══════════════════════════════════════════════════════════════════════════════
+
 import asyncio, re, os, datetime, random, threading, time, logging
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
@@ -129,7 +133,6 @@ class BotManager:
         consecutive_failures = 0
         while not entry["stop"]:
             try:
-                # ✅ اصلاح: استفاده از get_session به جای get_setting
                 session_data = db.get_session(owner_id) or ""
                 if not session_data:
                     await asyncio.sleep(10)
@@ -469,12 +472,12 @@ async def _handle_command(cl, event, text, owner_id, entry):
                         await edit(f"🔤 {converted}\n\n✅ فونت {font_id} برای متن «{text_to_convert}» اعمال شد.")
                     else: ss("selected_font", font_id); await edit(f"🔤 فونت {font_id} انتخاب شد.\nاین فونت روی پیام‌ها و ساعت اعمال می‌شود.")
                 else: ss("selected_font", font_id); await edit(f"🔤 فونت {font_id} انتخاب شد.\nاین فونت روی پیام‌ها و ساعت اعمال می‌شود.")
-            else: await edit("❗ آخرین قسمت باید شماره فونت باشد (۰ تا ).")
+            else: await edit("❗ آخرین قسمت باید شماره فونت باشد (۰ تا ۸).")
         else: await edit("❗ فرمت: فونت [متن] [شماره] یا فونت [شماره]")
     elif text == "لیست فونت":
         test_text = "امیر"
-        samples = {"0": "متن عادی", "1": "𝗕𝗼𝗹𝗱 𝗮𝗻𝘀", "2": "𝘐𝘵𝘢𝘭𝘪𝘤 𝘚𝘢𝘴", "3": "𝙼𝚗𝚘𝚙𝚊𝚌𝚎",
-            "4": "Ｆｕｌｌｗｉｄｔｈ", "5": "𝐒𝐞𝐫𝐟 𝐁𝐨𝐥𝐝", "6": "𝒮𝓇𝓅𝓉", "7": "S̶t̶r̶i̶k̶e̶t̶h̶r̶ou̶g̶h̶", "8": "U̲n̲d̲e̲r̲l̲i̲n̲e̲"}
+        samples = {"0": "متن عادی", "1": "𝗕𝗼𝗹𝗱 𝗦𝗮𝗻𝘀", "2": "𝘐𝘵𝘢𝘭𝘪𝘤 𝘚𝘢𝘯𝘴", "3": "𝙼𝚘𝚗𝚘𝚜𝚙𝚊𝚌𝚎",
+            "4": "Ｆｕｌｌｗｉｄｔｈ", "5": "𝐒𝐞𝐫𝐟 𝐁𝐨𝐥𝐝", "6": "𝒮𝒸𝓇𝓅𝓉", "7": "S̶t̶r̶i̶k̶e̶t̶h̶r̶o̶u̶g̶h̶", "8": "U̲n̲d̲e̲r̲l̲i̲n̲e̲"}
         lines = ["📝 لیست فونت‌ها با نمونه:\n"]
         lines.append("─" * 35)
         for k, v in samples.items():
@@ -640,7 +643,7 @@ async def _translate(text):
 async def _get_weather(city):
     try:
         import urllib.request, urllib.parse, json
-        api_key = config.WEATHER_API_KEY
+        api_key = getattr(config, "WEATHER_API_KEY", "")
         if not api_key: return "⚠️ کلید API هواشناسی تنظیم نشده."
         url = f"https://api.openweathermap.org/data/2.5/weather?q={urllib.parse.quote(city)}&appid={api_key}&units=metric&lang=fa"
         with urllib.request.urlopen(url, timeout=5) as resp:
