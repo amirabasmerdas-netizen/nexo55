@@ -170,7 +170,7 @@ class BotManager:
                     await asyncio.sleep(10)
                     continue
 
-                # ✅ تنظیمات بهینه برای اتصال پایدار
+                # ✅ تنظیمات بهینه برای اتصال پایدار (بدون receive_timeout و send_timeout)
                 cl = TelegramClient(
                     StringSession(session_data),
                     config.API_ID,
@@ -178,8 +178,6 @@ class BotManager:
                     connection_retries=5,
                     retry_delay=3,
                     timeout=30,
-                    receive_timeout=20,
-                    send_timeout=20,
                     auto_reconnect=True,
                     flood_sleep_threshold=60,
                     device_model="AMEL SELF55",
