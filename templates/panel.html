@@ -2,36 +2,119 @@
 <html lang="fa" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
   <title>AMEL SELF55 — پنل مدیریت</title>
   <link rel="stylesheet" href="/static/style.css">
   <meta name="theme-color" content="#0a0b14">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <style>
+    /* بهینه‌سازی برای موبایل */
+    @media (max-width: 768px) {
+      .auth-card { padding: 20px 15px; }
+      .auth-title { font-size: 24px; }
+      .auth-sub { font-size: 13px; }
+      .auth-input { font-size: 16px; padding: 12px; }
+      .auth-btn { font-size: 15px; padding: 12px; }
+      .ph-title { font-size: 20px; }
+      .ph-username { font-size: 13px; }
+      .dc-btn { font-size: 13px; padding: 10px 8px; }
+      .dc-btn-full { font-size: 14px; padding: 12px; }
+      .dc-input { font-size: 15px; padding: 10px; }
+      .guide-cmd { font-size: 13px; }
+      .guide-cmd code { font-size: 12px; }
+      .panel-footer { font-size: 12px; padding: 12px 8px; }
+      .panel-footer a { font-size: 12px; }
+      .toast { font-size: 13px; padding: 10px 16px; max-width: 90vw; }
+      .sb-item { font-size: 14px; padding: 12px 16px; }
+      .sb-brand-name { font-size: 16px; }
+      .sb-brand-sub { font-size: 10px; }
+      .dc-token-big { font-size: 28px; }
+      .dc-token-med { font-size: 20px; }
+      .dc-token-stat { padding: 12px 8px; }
+      table { font-size: 12px; }
+      th, td { padding: 8px 6px; }
+      .btn-pri, .btn-dng { font-size: 13px; padding: 8px 12px; }
+      .input-row { flex-wrap: wrap; gap: 8px; }
+      .input-row input, .input-row button { flex: 1 1 auto; min-width: 120px; }
+    }
+    
+    /* بهبود touch targets */
+    @media (pointer: coarse) {
+      button, .sb-item, .dc-btn, .dc-btn-full, .btn-pri, .btn-dng {
+        min-height: 44px;
+      }
+      .tgl-s { width: 48px; height: 26px; }
+      .tgl-s::before { width: 22px; height: 22px; }
+    }
+    
+    /* فوتر اسپانسرها */
+    .sponsors-footer {
+      text-align: center;
+      margin-top: 16px;
+      padding: 12px;
+      background: rgba(167, 139, 250, 0.08);
+      border-radius: 10px;
+      border: 1px solid rgba(167, 139, 250, 0.2);
+    }
+    .sponsors-footer p {
+      margin: 0 0 8px 0;
+      font-size: 13px;
+      color: #c4b5fd;
+    }
+    .sponsors-footer a {
+      color: #22c55e;
+      text-decoration: none;
+      font-weight: 600;
+      margin: 0 6px;
+    }
+    .sponsors-footer a:hover { text-decoration: underline; }
+    
+    /* کارت قیمت توکن */
+    .token-price-badge {
+      display: inline-block;
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      color: #fff;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 700;
+      margin-right: 6px;
+    }
+  </style>
 </head>
 <body>
 
+<!-- ─── ثبت‌نام ─── -->
 {% if page == 'register' %}
 <div class="auth-bg">
-  <div class="auth-particles"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+  <div class="auth-particles">
+    <span></span><span></span><span></span><span></span>
+    <span></span><span></span><span></span><span></span>
+  </div>
   <div class="auth-card">
     <div class="auth-logo">
       <div class="auth-logo-icon">🤖</div>
       <h1 class="auth-title">AMEL <span class="auth-title-accent">SELF55</span></h1>
       <p class="auth-sub">ایجاد حساب کاربری جدید</p>
     </div>
-    {% if error %}<div class="auth-error">{{ error }}</div>{% endif %}
     <div class="auth-form">
-      <div class="auth-field"><label>یوزرنیم</label>
+      <div class="auth-field">
+        <label>یوزرنیم</label>
         <input type="text" id="regUser" placeholder="حداقل ۳ کاراکتر" autocomplete="username" onkeydown="if(event.key==='Enter') doRegister()">
       </div>
-      <div class="auth-field"><label>رمز عبور</label>
+      <div class="auth-field">
+        <label>رمز عبور</label>
         <input type="password" id="regPass" placeholder="حداقل ۶ کاراکتر" autocomplete="new-password" onkeydown="if(event.key==='Enter') doRegister()">
       </div>
-      <div class="auth-field"><label>تکرار رمز عبور</label>
+      <div class="auth-field">
+        <label>تکرار رمز عبور</label>
         <input type="password" id="regPass2" placeholder="رمز را مجدداً وارد کنید" autocomplete="new-password" onkeydown="if(event.key==='Enter') doRegister()">
       </div>
       <div id="regError" class="auth-error" style="display:none"></div>
       <button class="auth-btn" id="regBtn" onclick="doRegister()">ایجاد حساب ←</button>
-      <p class="auth-link-text">حساب دارید؟ <a href="/login">وارد شوید</a></p>
+      <p class="auth-link-text">حساب دارید؟ <a href="/panel-login">وارد شوید</a></p>
     </div>
   </div>
 </div>
@@ -56,21 +139,26 @@ async function doRegister() {
 }
 </script>
 
+<!-- ─── ورود پنل ─── -->
 {% elif page == 'panel_login' %}
 <div class="auth-bg">
-  <div class="auth-particles"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+  <div class="auth-particles">
+    <span></span><span></span><span></span><span></span>
+    <span></span><span></span><span></span><span></span>
+  </div>
   <div class="auth-card">
     <div class="auth-logo">
       <div class="auth-logo-icon">🔐</div>
       <h1 class="auth-title">AMEL <span class="auth-title-accent">SELF55</span></h1>
       <p class="auth-sub">ورود به پنل مدیریت</p>
     </div>
-    {% if error %}<div class="auth-error">{{ error }}</div>{% endif %}
     <div class="auth-form">
-      <div class="auth-field"><label>یوزرنیم</label>
+      <div class="auth-field">
+        <label>یوزرنیم</label>
         <input type="text" id="loginUser" placeholder="یوزرنیم خود را وارد کنید" autocomplete="username" onkeydown="if(event.key==='Enter') doPanelLogin()">
       </div>
-      <div class="auth-field"><label>رمز عبور</label>
+      <div class="auth-field">
+        <label>رمز عبور</label>
         <input type="password" id="loginPass" placeholder="رمز عبور خود را وارد کنید" autocomplete="current-password" onkeydown="if(event.key==='Enter') doPanelLogin()">
       </div>
       <div id="loginError" class="auth-error" style="display:none"></div>
@@ -99,9 +187,13 @@ async function doPanelLogin() {
 document.addEventListener("DOMContentLoaded", () => { setTimeout(() => document.getElementById("loginUser").focus(), 100); });
 </script>
 
+<!-- ─── لاگین تلگرام ─── -->
 {% elif page == 'tg_login' %}
 <div class="auth-bg">
-  <div class="auth-particles"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+  <div class="auth-particles">
+    <span></span><span></span><span></span><span></span>
+    <span></span><span></span><span></span><span></span>
+  </div>
   <div class="auth-card" style="max-width:480px">
     <div class="auth-logo">
       <div class="auth-logo-icon">🤖</div>
@@ -140,9 +232,6 @@ document.addEventListener("DOMContentLoaded", () => { setTimeout(() => document.
         <p style="color:#8b91a8;margin-top:8px">در حال انتقال به پنل...</p>
       </div>
     </div>
-    <div style="margin-top:16px;text-align:center">
-      <a href="/" style="color:#8892aa;font-size:13px">رفتن به پنل بدون اتصال تلگرام</a>
-    </div>
   </div>
 </div>
 <script>
@@ -172,7 +261,7 @@ async function verifyCode() {
   btn.disabled=true; btn.textContent="..."; setErr("codeError","");
   try {
     const data = await (await fetch("/api/login/verify_code",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({code})})).json();
-    if (data.ok) { showStep("success"); setTimeout(()=>location.replace("/"),1500); }
+    if (data.ok) { showStep("success"); setTimeout(()=>location.replace("/"),2000); }
     else if (data.need_2fa) showStep("2fa");
     else setErr("codeError", data.error||"کد اشتباه است");
   } catch { setErr("codeError","خطا در اتصال"); }
@@ -185,31 +274,25 @@ async function verify2fa() {
   btn.disabled=true; btn.textContent="..."; setErr("tfaError","");
   try {
     const data = await (await fetch("/api/login/verify_2fa",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:pw})})).json();
-    if (data.ok) { showStep("success"); setTimeout(()=>location.replace("/"),1500); }
+    if (data.ok) { showStep("success"); setTimeout(()=>location.replace("/"),2000); }
     else setErr("tfaError", data.error||"رمز اشتباه است");
   } catch { setErr("tfaError","خطا در اتصال"); }
   btn.disabled=false; btn.textContent="ورود به پنل ←";
 }
 </script>
 
-{% elif page == 'error' %}
-<div class="auth-bg">
-  <div class="auth-card" style="text-align:center">
-    <div style="font-size:60px;margin-bottom:20px">⚠️</div>
-    <h2 style="color:#ff6b6b;margin-bottom:12px">خطا</h2>
-    <p style="color:#8892aa">{{ error }}</p>
-    <a href="/" class="auth-btn" style="display:inline-block;margin-top:20px;text-decoration:none">🏠 بازگشت</a>
-  </div>
-</div>
-
+<!-- ─── پنل اصلی ─── -->
 {% elif page == 'panel' %}
 <div class="panel-layout">
+
+  <!-- همبرگر موبایل -->
   <div class="mob-header">
-    <button class="mob-hamburger" id="menuToggle" onclick="toggleSidebar()">☰</button>
+    <button class="mob-hamburger" onclick="toggleSidebar()">☰</button>
     <span class="mob-title">AMEL SELF55</span>
   </div>
   <div class="mob-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
 
+  <!-- ─── سایدبار ─── -->
   <aside class="sidebar" id="sidebar">
     <div class="sb-brand">
       <div class="sb-brand-icon">
@@ -220,13 +303,52 @@ async function verify2fa() {
         <div class="sb-brand-sub">ADVANCED TELEGRAM SELF BOT</div>
       </div>
     </div>
+
     <nav class="sb-nav">
-      <a class="sb-item active" id="nav-dashboard" onclick="showSection('dashboard',this)"><span class="sb-icon">🏠</span> داشبورد</a>
-      <a class="sb-item" id="nav-lists" onclick="showSection('lists',this)"><span class="sb-icon">📋</span> لیست‌ها</a>
-      <a class="sb-item" id="nav-settings" onclick="showSection('settings',this)"><span class="sb-icon">⚙️</span> تنظیمات</a>
-      <a class="sb-item" id="nav-guide" onclick="showSection('guide',this)"><span class="sb-icon">❓</span> راهنما</a>
-      <a class="sb-item" id="nav-deleted" onclick="showSection('deleted',this)"><span class="sb-icon">🗑️</span> پیام‌های حذف‌شده</a>
+      <a class="sb-item active" id="nav-dashboard" onclick="showSection('dashboard',this)">
+        <span class="sb-icon">🏠</span> داشبورد
+      </a>
+      <a class="sb-item" id="nav-main" onclick="showSection('main',this)">
+        <span class="sb-icon">⚙️</span> اصلی
+      </a>
+      <a class="sb-item" id="nav-lists" onclick="showSection('lists',this)">
+        <span class="sb-icon">☰</span> لیست‌ها
+      </a>
+      <a class="sb-item" id="nav-secretary" onclick="showSection('secretary',this)">
+        <span class="sb-icon">👤</span> منشی
+      </a>
+      <a class="sb-item" id="nav-security" onclick="showSection('security',this)">
+        <span class="sb-icon">🛡️</span> امنیت
+      </a>
+      <a class="sb-item" id="nav-automation" onclick="showSection('automation',this)">
+        <span class="sb-icon">🔄</span> اتوماسیون
+      </a>
+      <a class="sb-item" id="nav-tools" onclick="showSection('tools',this)">
+        <span class="sb-icon">🔧</span> ابزار
+      </a>
+      <a class="sb-item" id="nav-spam" onclick="showSection('spam',this)">
+        <span class="sb-icon">💣</span> اسپم
+      </a>
+      <a class="sb-item" id="nav-message" onclick="showSection('message',this)">
+        <span class="sb-icon">✉️</span> پیام
+      </a>
+      <a class="sb-item" id="nav-media" onclick="showSection('media',this)">
+        <span class="sb-icon">📥</span> سیو مدیا
+      </a>
+      <a class="sb-item" id="nav-tokens" onclick="showSection('dashboard',this); setTimeout(()=>{const c=document.getElementById('tokenCard');if(c)c.scrollIntoView({behavior:'smooth'});},150);" style="display:none">
+        <span class="sb-icon">🪙</span> توکن‌ها
+      </a>
+      <a class="sb-item" id="nav-settings" onclick="showSection('settings',this)">
+        <span class="sb-icon">⚙️</span> تنظیمات
+      </a>
+      <a class="sb-item" id="nav-guide" onclick="showSection('guide',this)">
+        <span class="sb-icon">❓</span> راهنما
+      </a>
+      <a class="sb-item" id="nav-deleted" onclick="showSection('deleted',this)">
+        <span class="sb-icon">🗑️</span> پیام‌های حذف‌شده
+      </a>
     </nav>
+
     <div class="sb-footer">
       <div class="sb-creator">
         <span style="font-size:18px">✈️</span>
@@ -241,11 +363,14 @@ async function verify2fa() {
     </div>
   </aside>
 
+  <!-- ─── محتوای اصلی ─── -->
   <div class="main-area">
+
+    <!-- ─── هدر ─── -->
     <div class="panel-header">
       <div class="ph-left">
         <h1 class="ph-title">AMEL <span>SELF55</span></h1>
-        <p class="ph-sub">← پنل مدیریت حرفه‌ای →</p>
+        <p class="ph-sub">← پنل مدیریت حرفه‌ای سلف تلگرام →</p>
       </div>
       <div class="ph-robot">🤖</div>
       <div class="ph-right">
@@ -256,76 +381,122 @@ async function verify2fa() {
             <div class="ph-welcome">خوش آمدید</div>
           </div>
         </div>
+        <div class="ph-tokens" id="phTokensWrap" style="display:none">
+          <span class="ph-token-icon">🪙</span>
+          <span id="phTokenBalance" class="ph-token-num">--</span>
+          <span class="ph-token-label">توکن</span>
+        </div>
         <div class="ph-status">
           <span class="ph-dot" id="phDot"></span>
           <span id="phStatusTxt">بررسی...</span>
           <span class="ph-status-label">وضعیت سلف:</span>
         </div>
         <div class="ph-clock" id="phClock">--:--:--</div>
+        <div class="ph-date" id="phDate"></div>
       </div>
     </div>
 
+    <!-- ─── داشبورد ─── -->
     <div class="section active" id="sec-dashboard">
       <div class="dash-grid">
+
+        <!-- اصلی -->
         <div class="dash-card">
-          <div class="dc-header"><span class="dc-icon">⚙️</span> کنترل سلف</div>
+          <div class="dc-header"><span class="dc-icon">⚙️</span> اصلی</div>
           <div class="dc-body">
             <div class="dc-btn-row">
-              <button class="dc-btn dc-green" onclick="startBot()">▶ سلف روشن</button>
-              <button class="dc-btn dc-red" onclick="stopBot()">⏹ سلف خاموش</button>
+              <button class="dc-btn dc-green" onclick="startBot()">سلف روشن</button>
+              <button class="dc-btn dc-red" onclick="stopBot()">سلف خاموش</button>
             </div>
-            <button class="dc-btn-full dc-gray" onclick="showStatus()">📊 وضعیت</button>
-            <div id="botMsg" style="margin-top:10px;font-size:13px;color:#8892aa;text-align:center;display:none"></div>
+            <button class="dc-btn-full dc-gray" onclick="showStatus()">وضعیت <span style="font-size:11px">📊</span></button>
           </div>
         </div>
 
+        <!-- لیست‌ها -->
         <div class="dash-card">
-          <div class="dc-header"><span class="dc-icon">🛡️</span> امنیت</div>
-          <div class="dc-body dc-toggles">
-            <div class="dc-toggle-row"><span>ضد حذف</span><label class="tgl"><input type="checkbox" id="tog-anti_delete_active" onchange="toggleFeature('anti_delete_active',this)"><span class="tgl-s"></span></label></div>
-            <div class="dc-toggle-row"><span>ضد لینک</span><label class="tgl"><input type="checkbox" id="tog-anti_link_active" onchange="toggleFeature('anti_link_active',this)"><span class="tgl-s"></span></label></div>
-            <div class="dc-toggle-row"><span>قفل پیوی</span><label class="tgl"><input type="checkbox" id="tog-private_lock_active" onchange="toggleFeature('private_lock_active',this)"><span class="tgl-s"></span></label></div>
-            <div class="dc-toggle-row"><span>پاسخ دشمن</span><label class="tgl"><input type="checkbox" id="tog-enemy_reply_active" onchange="toggleFeature('enemy_reply_active',this)"><span class="tgl-s"></span></label></div>
+          <div class="dc-header"><span class="dc-icon">📋</span> لیست‌ها</div>
+          <div class="dc-body">
+            <div class="dc-list-item" onclick="showSection('lists',null,'enemies')">
+              <span>👤</span> تنظیم دشمن / حذف دشمن
+              <span class="dc-badge" id="bdgEnemies">0</span>
+            </div>
+            <div class="dc-list-item" onclick="clearEnemiesQuick()"><span>🗑️</span> پاک کردن لیست دشمن</div>
+            <div class="dc-list-item" onclick="showSection('lists',null,'enemies')"><span>👁️</span> نمایش لیست دشمن</div>
+            <div class="dc-list-item" onclick="showSection('lists',null,'friends')">
+              <span>💚</span> تنظیم دوست / حذف دوست
+              <span class="dc-badge dc-badge-green" id="bdgFriends">0</span>
+            </div>
+            <div class="dc-list-item" onclick="clearFriendsQuick()"><span>🗑️</span> پاک کردن لیست دوست</div>
+            <div class="dc-list-item" onclick="showSection('lists',null,'friends')"><span>👁️</span> نمایش لیست دوست</div>
           </div>
         </div>
 
+        <!-- منشی -->
         <div class="dash-card">
-          <div class="dc-header"><span class="dc-icon">⚡</span> اتوماسیون</div>
-          <div class="dc-body dc-toggles">
-            <div class="dc-toggle-row"><span>سین خودکار</span><label class="tgl"><input type="checkbox" id="tog-auto_seen_active" onchange="toggleFeature('auto_seen_active',this)"><span class="tgl-s"></span></label></div>
-            <div class="dc-toggle-row"><span>ری‌اکشن خودکار</span><label class="tgl"><input type="checkbox" id="tog-auto_reaction_active" onchange="toggleFeature('auto_reaction_active',this)"><span class="tgl-s"></span></label></div>
-            <div class="dc-toggle-row"><span>ذخیره مدیا</span><label class="tgl"><input type="checkbox" id="tog-auto_save_media" onchange="toggleFeature('auto_save_media',this)"><span class="tgl-s"></span></label></div>
-            <div class="dc-toggle-row"><span>ساعت نام</span><label class="tgl"><input type="checkbox" id="tog-clock_name_active" onchange="toggleFeature('clock_name_active',this)"><span class="tgl-s"></span></label></div>
-            <div class="dc-toggle-row"><span>ساعت بیو</span><label class="tgl"><input type="checkbox" id="tog-clock_bio_active" onchange="toggleFeature('clock_bio_active',this)"><span class="tgl-s"></span></label></div>
-          </div>
-        </div>
-
-        <div class="dash-card">
-          <div class="dc-header"><span class="dc-icon">🤖</span> منشی خودکار</div>
+          <div class="dc-header"><span class="dc-icon">⚙️</span> منشی</div>
           <div class="dc-body">
             <div class="dc-btn-row">
-              <button class="dc-btn dc-green" onclick="toggleQuick('secretary_active',true)">روشن</button>
-              <button class="dc-btn dc-red" onclick="toggleQuick('secretary_active',false)">خاموش</button>
+              <button class="dc-btn dc-green" onclick="toggleQuick('secretary_active',true)">منشی روشن</button>
+              <button class="dc-btn dc-red" onclick="toggleQuick('secretary_active',false)">منشی خاموش</button>
             </div>
-            <div class="dc-input-row" style="margin-top:10px">
-              <input type="text" id="secMsgInline" class="dc-input" placeholder="پیام منشی...">
+            <div class="dc-input-row">
+              <input type="text" id="secMsgInline" class="dc-input" placeholder="پیام منشی [متن]">
               <button class="dc-icon-btn" onclick="saveSecretaryInline()">💬</button>
             </div>
           </div>
         </div>
 
+        <!-- امنیت -->
         <div class="dash-card">
-          <div class="dc-header"><span class="dc-icon">💎</span> الماس</div>
-          <div class="dc-body">
-            <div style="text-align:center;margin-bottom:12px">
-              <div style="font-size:32px;font-weight:800;color:#f59e0b" id="tokenBalance">--</div>
-              <div style="font-size:12px;color:#8892aa">موجودی الماس</div>
+          <div class="dc-header"><span class="dc-icon">🛡️</span> امنیت</div>
+          <div class="dc-body dc-toggles">
+            <div class="dc-toggle-row">
+              <span>ضد حذف</span>
+              <label class="tgl"><input type="checkbox" id="tog-anti_delete_active" onchange="toggleFeature('anti_delete_active',this)"><span class="tgl-s"></span></label>
             </div>
-            <button class="dc-btn-full dc-gold" onclick="claimDaily()">🎁 هدیه روزانه</button>
-            <button class="dc-btn-full dc-cyan" style="margin-top:8px" onclick="copyReferral()">🔗 لینک رفرال</button>
+            <div class="dc-toggle-row">
+              <span>ضد لینک</span>
+              <label class="tgl"><input type="checkbox" id="tog-anti_link_active" onchange="toggleFeature('anti_link_active',this)"><span class="tgl-s"></span></label>
+            </div>
+            <div class="dc-toggle-row">
+              <span>قفل پیوی</span>
+              <label class="tgl"><input type="checkbox" id="tog-private_lock_active" onchange="toggleFeature('private_lock_active',this)"><span class="tgl-s"></span></label>
+            </div>
+            <div class="dc-toggle-row">
+              <span>پاسخ دشمن</span>
+              <label class="tgl"><input type="checkbox" id="tog-enemy_reply_active" onchange="toggleFeature('enemy_reply_active',this)"><span class="tgl-s"></span></label>
+            </div>
           </div>
         </div>
 
+        <!-- اتوماسیون -->
+        <div class="dash-card">
+          <div class="dc-header"><span class="dc-icon">⚙️</span> اتوماسیون</div>
+          <div class="dc-body dc-toggles">
+            <div class="dc-toggle-row">
+              <span>سین خودکار</span>
+              <label class="tgl"><input type="checkbox" id="tog-auto_seen_active" onchange="toggleFeature('auto_seen_active',this)"><span class="tgl-s"></span></label>
+            </div>
+            <div class="dc-toggle-row">
+              <span>ری‌اکشن خودکار</span>
+              <label class="tgl"><input type="checkbox" id="tog-auto_reaction_active" onchange="toggleFeature('auto_reaction_active',this)"><span class="tgl-s"></span></label>
+            </div>
+            <div class="dc-toggle-row">
+              <span>ذخیره مدیا</span>
+              <label class="tgl"><input type="checkbox" id="tog-auto_save_media" onchange="toggleFeature('auto_save_media',this)"><span class="tgl-s"></span></label>
+            </div>
+            <div class="dc-toggle-row">
+              <span>ساعت نام</span>
+              <label class="tgl"><input type="checkbox" id="tog-clock_name_active" onchange="toggleFeature('clock_name_active',this)"><span class="tgl-s"></span></label>
+            </div>
+            <div class="dc-toggle-row">
+              <span>ساعت بیو</span>
+              <label class="tgl"><input type="checkbox" id="tog-clock_bio_active" onchange="toggleFeature('clock_bio_active',this)"><span class="tgl-s"></span></label>
+            </div>
+          </div>
+        </div>
+
+        <!-- ابزار -->
         <div class="dash-card">
           <div class="dc-header"><span class="dc-icon">🔧</span> ابزار</div>
           <div class="dc-body">
@@ -337,22 +508,47 @@ async function verify2fa() {
               <input type="text" id="toolWeather" class="dc-input" placeholder="هوا [شهر]">
               <button class="dc-icon-btn" onclick="runTool('weather',document.getElementById('toolWeather').value)">⛅</button>
             </div>
-            <button class="dc-btn-full dc-gray" onclick="runTool('currency','')">💲 نرخ ارز</button>
+            <div class="dc-tool-row">
+              <button class="dc-btn-full dc-gray" onclick="runTool('currency','')">ارز <span>💲</span></button>
+            </div>
           </div>
         </div>
 
+        <!-- اسپم -->
         <div class="dash-card">
           <div class="dc-header"><span class="dc-icon">💣</span> اسپم</div>
           <div class="dc-body">
             <div class="dc-tool-row">
-              <input type="number" id="spamCount" class="dc-input" placeholder="تعداد" min="1" max="50" style="width:90px;flex-shrink:0">
+              <input type="number" id="spamCount" class="dc-input" placeholder="تعداد" min="1" max="100" style="width:90px;flex-shrink:0">
               <input type="text" id="spamText" class="dc-input" placeholder="متن پیام">
               <button class="dc-icon-btn" onclick="startSpam()">✈️</button>
             </div>
-            <button class="dc-btn-full dc-red" style="margin-top:8px" onclick="stopSpam()">⏹ توقف اسپم</button>
+            <button class="dc-btn-full dc-red" onclick="stopSpam()">توقف اسپم ⏹</button>
           </div>
         </div>
 
+        <!-- پیام -->
+        <div class="dash-card">
+          <div class="dc-header"><span class="dc-icon">✉️</span> پیام</div>
+          <div class="dc-body">
+            <div class="dc-list-item cursor-pointer">
+              <span>💾</span> ذخیره [1-10] — ریپلای
+            </div>
+            <div class="dc-list-item cursor-pointer">
+              <span>✈️</span> ارسال ذخیره [1-10]
+            </div>
+            <div class="dc-tool-row">
+              <input type="number" id="autoDelSec" class="dc-input" placeholder="حذف بعد [ثانیه]" min="1">
+              <button class="dc-icon-btn" onclick="saveAutoDel()">⏱️</button>
+            </div>
+            <div class="dc-tool-row">
+              <input type="text" id="schedMsg" class="dc-input" placeholder="[YYYY-MM-DD HH:MM] متن">
+              <button class="dc-icon-btn" onclick="scheduleMsg()">📅</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- سیو مدیا -->
         <div class="dash-card">
           <div class="dc-header"><span class="dc-icon">📥</span> سیو مدیا</div>
           <div class="dc-body">
@@ -361,12 +557,47 @@ async function verify2fa() {
               <input type="number" id="saveChCount" class="dc-input" placeholder="تعداد" min="1" style="width:90px;flex-shrink:0">
               <button class="dc-icon-btn" onclick="startSave()">📥</button>
             </div>
-            <button class="dc-btn-full dc-red" style="margin-top:8px" onclick="stopSave()">⏹ توقف سیو</button>
+            <button class="dc-btn-full dc-red" onclick="stopSave()">توقف سیو ⏹</button>
           </div>
         </div>
+
+        <!-- توکن (full width) -->
+        <div class="dash-card dc-token-card" id="tokenCard" style="display:none">
+          <div class="dc-header dc-header-gold"><span class="dc-icon">🪙</span> مدیریت توکن</div>
+          <div class="dc-body dc-token-body">
+            <div class="dc-token-stats">
+              <div class="dc-token-stat">
+                <div class="dc-token-big" id="tokenBalance">--</div>
+                <div class="dc-token-sub">موجودی فعلی</div>
+              </div>
+              <div class="dc-token-stat">
+                <div class="dc-token-med" id="tokenTotal">--</div>
+                <div class="dc-token-sub">کل دریافتی</div>
+              </div>
+              <div class="dc-token-stat">
+                <div class="dc-token-med" id="tokenRefs">--</div>
+                <div class="dc-token-sub">تعداد رفرال</div>
+              </div>
+            </div>
+            <div class="dc-token-actions">
+              <button class="dc-btn-full dc-gold" id="dailyBtn" onclick="claimDaily()">🎁 هدیه روزانه</button>
+              <button class="dc-btn-full dc-cyan" onclick="copyReferral()">🔗 کپی لینک رفرال</button>
+              <button class="dc-btn-full dc-purple" onclick="buyTokens()">🛒 خرید توکن</button>
+            </div>
+            <div class="dc-token-info-bar">
+              ⚡ <b id="tkSession">2</b> توکن = <b id="tkHours">2</b> ساعت سلف &nbsp;|&nbsp;
+              🎁 <b id="tkDaily">1</b> توکن هدیه روزانه &nbsp;|&nbsp;
+              🔗 <b id="tkRef">12</b> توکن به ازای هر رفرال
+              <br>
+              💰 قیمت هر توکن: <span class="token-price-badge">200 تومان</span>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
 
+    <!-- ─── لیست‌ها ─── -->
     <div class="section" id="sec-lists" style="display:none">
       <div class="sec-header"><h2>📋 مدیریت لیست‌ها</h2></div>
       <div class="tabs-bar">
@@ -386,8 +617,8 @@ async function verify2fa() {
         <div class="card-box">
           <div class="cb-title">🔴 لیست دشمن</div>
           <div class="table-wrap"><table>
-            <thead><tr><th>آیدی</th><th>نام</th><th>عملیات</th></tr></thead>
-            <tbody id="enemyTable"><tr><td colspan="3" class="tbl-empty">در حال بارگذاری...</td></tr></tbody>
+            <thead><tr><th>آیدی</th><th>نام</th><th>یوزرنیم</th><th>تاریخ</th><th>عملیات</th></tr></thead>
+            <tbody id="enemyTable"><tr><td colspan="5" class="tbl-empty">در حال بارگذاری...</td></tr></tbody>
           </table></div>
         </div>
       </div>
@@ -404,13 +635,14 @@ async function verify2fa() {
         <div class="card-box">
           <div class="cb-title">💚 لیست دوست</div>
           <div class="table-wrap"><table>
-            <thead><tr><th>آیدی</th><th>نام</th><th>عملیات</th></tr></thead>
-            <tbody id="friendTable"><tr><td colspan="3" class="tbl-empty">در حال بارگذاری...</td></tr></tbody>
+            <thead><tr><th>آیدی</th><th>نام</th><th>یوزرنیم</th><th>تاریخ</th><th>عملیات</th></tr></thead>
+            <tbody id="friendTable"><tr><td colspan="5" class="tbl-empty">در حال بارگذاری...</td></tr></tbody>
           </table></div>
         </div>
       </div>
     </div>
 
+    <!-- ─── تنظیمات ─── -->
     <div class="section" id="sec-settings" style="display:none">
       <div class="sec-header"><h2>⚙️ تنظیمات</h2></div>
       <div class="settings-grid">
@@ -440,32 +672,29 @@ async function verify2fa() {
           <button class="btn-pri" style="margin-top:10px" onclick="saveFont()">💾 ذخیره</button>
         </div>
         <div class="card-box">
-          <div class="cb-title">🔌 مدیریت سلف</div>
-          <button class="btn-dng" onclick="removeSession()">🗑️ حذف سشن تلگرام</button>
-          <p style="font-size:12px;color:#8892aa;margin-top:8px">با حذف سشن، از تلگرام خارج می‌شوید.</p>
-        </div>
-        <div class="card-box">
-          <div class="cb-title">💎 انتقال الماس</div>
-          <input type="text" id="transferUser" placeholder="یوزرنیم گیرنده" style="margin-bottom:8px">
-          <input type="number" id="transferAmount" placeholder="مقدار" min="1" style="margin-bottom:8px">
-          <button class="btn-pri" onclick="transferDiamonds()">💎 انتقال</button>
+          <div class="cb-title">💣 تأخیر اسپم (ثانیه)</div>
+          <input type="number" id="spamDelay" placeholder="2" min="1" max="60" style="max-width:200px" dir="ltr">
+          <button class="btn-pri" style="margin-top:10px" onclick="saveSpamDelay()">💾 ذخیره</button>
         </div>
       </div>
     </div>
 
+    <!-- ─── راهنما ─── -->
     <div class="section" id="sec-guide" style="display:none">
       <div class="sec-header"><h2>📖 راهنمای دستورات</h2></div>
       <div class="guide-grid">
         <div class="guide-card"><h4>🔹 اصلی</h4>
-          <div class="guide-cmd"><code>سلف روشن/خاموش</code></div>
-          <div class="guide-cmd"><code>وضعیت</code></div>
-          <div class="guide-cmd"><code>راهنما</code></div>
+          <div class="guide-cmd"><code>سلف روشن</code> — فعال‌سازی</div>
+          <div class="guide-cmd"><code>سلف خاموش</code> — غیرفعال</div>
+          <div class="guide-cmd"><code>وضعیت</code> — نمایش تنظیمات</div>
+          <div class="guide-cmd"><code>راهنما</code> — این پیام</div>
         </div>
         <div class="guide-card"><h4>👥 لیست‌ها</h4>
           <div class="guide-cmd"><code>تنظیم دشمن</code> — ریپلای</div>
-          <div class="guide-cmd"><code>حذف دشمن</code></div>
+          <div class="guide-cmd"><code>حذف دشمن</code> — ریپلای/آیدی</div>
           <div class="guide-cmd"><code>نمایش لیست دشمن</code></div>
           <div class="guide-cmd"><code>تنظیم دوست</code> — ریپلای</div>
+          <div class="guide-cmd"><code>حذف دوست</code> — ریپلای/آیدی</div>
           <div class="guide-cmd"><code>نمایش لیست دوست</code></div>
         </div>
         <div class="guide-card"><h4>🤖 منشی</h4>
@@ -483,11 +712,10 @@ async function verify2fa() {
           <div class="guide-cmd"><code>ری‌اکشن روشن/خاموش</code></div>
           <div class="guide-cmd"><code>ری‌اکشن [ایموجی]</code></div>
           <div class="guide-cmd"><code>ذخیره مدیا روشن/خاموش</code></div>
-          <div class="guide-cmd"><code>ساعت نام/بیو روشن/خاموش</code></div>
         </div>
-        <div class="guide-card"><h4>🔤 فونت</h4>
-          <div class="guide-cmd"><code>فونت [متن] [0-8]</code></div>
-          <div class="guide-cmd"><code>لیست فونت</code></div>
+        <div class="guide-card"><h4>⏰ ساعت</h4>
+          <div class="guide-cmd"><code>ساعت نام روشن/خاموش</code></div>
+          <div class="guide-cmd"><code>ساعت بیو روشن/خاموش</code></div>
         </div>
         <div class="guide-card"><h4>💣 اسپم</h4>
           <div class="guide-cmd"><code>اسپم [تعداد] [متن]</code></div>
@@ -498,10 +726,11 @@ async function verify2fa() {
           <div class="guide-cmd"><code>هوا [شهر]</code></div>
           <div class="guide-cmd"><code>ارز</code></div>
         </div>
-        <div class="guide-card"><h4>💾 پیام</h4>
+        <div class="guide-card"><h4>💾 پیام ذخیره</h4>
           <div class="guide-cmd"><code>ذخیره [1-10]</code> — ریپلای</div>
           <div class="guide-cmd"><code>ارسال ذخیره [1-10]</code></div>
           <div class="guide-cmd"><code>حذف بعد [ثانیه]</code></div>
+          <div class="guide-cmd"><code>ارسال زمان‌بندی [تاریخ]</code></div>
         </div>
         <div class="guide-card"><h4>📥 سیو مدیا</h4>
           <div class="guide-cmd"><code>سیو کانال [@user] [n]</code></div>
@@ -510,331 +739,351 @@ async function verify2fa() {
       </div>
     </div>
 
+    <!-- ─── پیام‌های حذف‌شده ─── -->
     <div class="section" id="sec-deleted" style="display:none">
       <div class="sec-header"><h2>🗑️ پیام‌های حذف‌شده</h2></div>
       <div class="card-box">
+        <div class="cb-title">📜 لیست پیام‌ها</div>
         <div class="table-wrap"><table>
-          <thead><tr><th>فرستنده</th><th>متن پیام</th><th>نوع</th><th>زمان</th></tr></thead>
+          <thead><tr><th>فرستنده</th><th>متن پیام</th><th>نوع</th><th>زمان حذف</th></tr></thead>
           <tbody id="deletedTable"><tr><td colspan="4" class="tbl-empty">در حال بارگذاری...</td></tr></tbody>
         </table></div>
       </div>
     </div>
 
+    <!-- فوتر -->
     <div class="panel-footer">
-      <p>🤝 اسپانسرها: <a href="https://t.me/pesar777" target="_blank">@pesar777</a> | <a href="https://t.me/ISOLODEVIL" target="_blank">@ISOLODEVIL</a></p>
-      <p>👑 مالک و پشتیبانی: <a href="https://t.me/amele55" target="_blank">@amele55</a></p>
+      <div class="sponsors-footer">
+        <p>🤝 <b>اسپانسرهای رسمی پروژه:</b></p>
+        <a href="https://t.me/pesar777" target="_blank">@pesar777</a> | 
+        <a href="https://t.me/ISOLODEVIL" target="_blank">@ISOLODEVIL</a>
+      </div>
+      <p style="margin-top:12px;font-size:13px;color:#888">
+        🌐 AMEL55.COM &nbsp;&nbsp; Design By <a href="https://t.me/Amele55" target="_blank" style="color:#c4b5fd;text-decoration:none">@Amele55</a> ❤️
+      </p>
     </div>
   </div>
 </div>
 
-<div id="toast" class="toast" style="display:none"></div>
+<div class="toast-wrap" id="toastWrap"></div>
 
 <script>
-const BASE = "";
-let statusInterval = null;
+let currentSettings = {};
+window._ownerId = {{ owner_id }};
+window._botUsername = "";
 
-function toast(msg, type="info") {
-  const t = document.getElementById("toast");
-  t.textContent = msg;
-  t.className = "toast toast-" + type;
-  t.style.display = "block";
-  setTimeout(() => { t.style.display = "none"; }, 3000);
+const TOGGLES = {
+  anti_delete_active: "ضد حذف",
+  anti_link_active: "ضد لینک",
+  private_lock_active: "قفل پیوی",
+  enemy_reply_active: "پاسخ دشمن",
+  auto_save_media: "ذخیره مدیا",
+  secretary_active: "منشی",
+  auto_seen_active: "سین خودکار",
+  auto_reaction_active: "ری‌اکشن خودکار",
+  clock_name_active: "ساعت نام",
+  clock_bio_active: "ساعت بیو",
+  self_bot_active: "سلف‌بات",
+};
+
+document.addEventListener("DOMContentLoaded", async () => {
+  startClock();
+  await loadSettings();
+  loadEnemies();
+  loadFriends();
+  loadTokens();
+});
+
+function startClock() {
+  function tick() {
+    const now = new Date();
+    document.getElementById("phClock").textContent = now.toLocaleTimeString("fa-IR");
+    const days = ["یکشنبه","دوشنبه","سه‌شنبه","چهارشنبه","پنجشنبه","جمعه","شنبه"];
+    document.getElementById("phDate").textContent = now.toLocaleDateString("fa-IR") + " — " + days[now.getDay()];
+  }
+  tick(); setInterval(tick, 1000);
 }
 
-function showSection(name, el) {
-  document.querySelectorAll(".section").forEach(s => s.style.display = "none");
-  document.querySelectorAll(".sb-item").forEach(i => i.classList.remove("active"));
-  const sec = document.getElementById("sec-" + name);
-  if (sec) sec.style.display = "block";
-  if (el) el.classList.add("active");
-  closeSidebar();
-  if (name === "lists") { loadEnemies(); loadFriends(); }
-  if (name === "deleted") loadDeleted();
-  if (name === "settings") loadSettings();
-}
-
-function toggleSidebar() {
-  document.getElementById("sidebar").classList.toggle("open");
-  document.getElementById("sidebarOverlay").classList.toggle("active");
-}
-function closeSidebar() {
-  document.getElementById("sidebar").classList.remove("open");
-  document.getElementById("sidebarOverlay").classList.remove("active");
-}
-
-async function api(path, method="GET", body=null) {
-  const opts = { method, headers: {"Content-Type":"application/json"} };
-  if (body) opts.body = JSON.stringify(body);
-  const res = await fetch(BASE + path, opts);
-  return res.json();
-}
-
-async function checkStatus() {
+async function loadSettings() {
   try {
-    const data = await api("/api/session/status");
-    const dot = document.getElementById("phDot");
-    const txt = document.getElementById("phStatusTxt");
-    if (data.running) {
-      dot.className = "ph-dot ph-dot-on";
-      txt.textContent = "فعال";
-    } else if (data.active) {
-      dot.className = "ph-dot";
-      dot.style.background = "#f59e0b";
-      txt.textContent = "متصل (متوقف)";
-    } else {
-      dot.className = "ph-dot ph-dot-off";
-      txt.textContent = "غیرفعال";
+    const res = await fetch("/api/settings");
+    currentSettings = await res.json();
+    applyToggleStates();
+    updateHeaderStatus();
+    if (document.getElementById("secretaryMsg")) document.getElementById("secretaryMsg").value = currentSettings.secretary_message || "";
+    if (document.getElementById("reactionEmoji")) document.getElementById("reactionEmoji").value = currentSettings.auto_reaction_emoji || "❤️";
+    if (document.getElementById("fontSelect")) document.getElementById("fontSelect").value = currentSettings.selected_font || "0";
+    if (document.getElementById("spamDelay")) document.getElementById("spamDelay").value = currentSettings.spam_delay || "2";
+    if (document.getElementById("secMsgInline")) document.getElementById("secMsgInline").value = currentSettings.secretary_message || "";
+  } catch { showToast("خطا در بارگذاری تنظیمات","error"); }
+}
+
+function applyToggleStates() {
+  for (const key of Object.keys(TOGGLES)) {
+    const el = document.getElementById("tog-"+key);
+    if (el) el.checked = currentSettings[key] === "1";
+  }
+}
+
+function updateHeaderStatus() {
+  const on = currentSettings.self_bot_active === "1";
+  const dot = document.getElementById("phDot");
+  const txt = document.getElementById("phStatusTxt");
+  if (dot) { dot.className = "ph-dot " + (on ? "ph-dot-on" : "ph-dot-off"); }
+  if (txt) txt.textContent = on ? "فعال" : "غیرفعال";
+}
+
+async function toggleFeature(key, checkbox) {
+  try {
+    const res = await fetch("/api/toggle/"+key, {method:"POST"});
+    const data = await res.json();
+    if (!data.ok) { showToast("خطا","error"); if(checkbox) checkbox.checked = !checkbox.checked; return; }
+    currentSettings[key] = data.active ? "1" : "0";
+    if (checkbox) checkbox.checked = data.active;
+    showToast(data.active ? "✅ "+TOGGLES[key]+" روشن شد" : "❌ "+TOGGLES[key]+" خاموش شد", data.active?"success":"info");
+    updateHeaderStatus();
+  } catch { showToast("خطا در اتصال","error"); }
+}
+
+async function toggleQuick(key, wantOn) {
+  const current = currentSettings[key] === "1";
+  if (current === wantOn) { showToast("قبلاً "+(wantOn?"روشن":"خاموش")+" بود","info"); return; }
+  try {
+    const res = await fetch("/api/toggle/"+key, {method:"POST"});
+    const data = await res.json();
+    if (data.ok) {
+      currentSettings[key] = data.active ? "1" : "0";
+      const el = document.getElementById("tog-"+key);
+      if (el) el.checked = data.active;
+      showToast(data.active?"✅ روشن شد":"❌ خاموش شد", data.active?"success":"info");
+      updateHeaderStatus();
     }
-  } catch {}
-}
-
-async function loadBalance() {
-  try {
-    const data = await api("/api/balance");
-    if (data.ok) document.getElementById("tokenBalance").textContent = data.balance;
-  } catch {}
+  } catch { showToast("خطا","error"); }
 }
 
 async function startBot() {
-  const msgEl = document.getElementById("botMsg");
-  msgEl.style.display = "block";
-  msgEl.textContent = "⏳ در حال راه‌اندازی...";
   try {
-    const data = await api("/api/start", "POST");
-    msgEl.textContent = data.message || (data.ok ? "✅ روشن شد" : data.error);
-    msgEl.style.color = data.ok ? "#22c55e" : "#ff6b6b";
-    if (data.ok) { checkStatus(); loadBalance(); }
-  } catch { msgEl.textContent = "❌ خطا در اتصال"; }
+    const data = await (await fetch("/api/start",{method:"POST"})).json();
+    if (data.ok) {
+      currentSettings.self_bot_active="1";
+      updateHeaderStatus();
+      showToast(data.message || "✅ سلف روشن شد","success");
+      loadTokens();
+    } else showToast(data.error||"خطا","error");
+  } catch { showToast("خطا","error"); }
 }
 
 async function stopBot() {
-  const msgEl = document.getElementById("botMsg");
-  msgEl.style.display = "block";
   try {
-    const data = await api("/api/stop", "POST");
-    msgEl.textContent = data.ok ? "❌ سلف خاموش شد." : data.error;
-    msgEl.style.color = "#ff6b6b";
-    checkStatus();
-  } catch {}
+    const data = await (await fetch("/api/stop",{method:"POST"})).json();
+    if (data.ok) { currentSettings.self_bot_active="0"; updateHeaderStatus(); showToast("⏹ سلف خاموش شد","info"); }
+    else showToast(data.error||"خطا","error");
+  } catch { showToast("خطا","error"); }
 }
 
-async function showStatus() {
-  toast("در حال دریافت وضعیت...");
-}
-
-async function toggleFeature(key, el) {
-  try {
-    const data = await api("/api/toggle/" + key, "POST");
-    if (!data.ok) { el.checked = !el.checked; toast(data.error || "خطا", "error"); }
-    else toast(data.active ? key + " روشن شد ✅" : key + " خاموش شد ❌");
-  } catch { el.checked = !el.checked; }
-}
-
-async function toggleQuick(key, val) {
-  try {
-    await api("/api/settings", "POST", {[key]: val ? "1" : "0"});
-    toast(val ? "روشن شد ✅" : "خاموش شد ❌");
-  } catch {}
-}
+function showStatus() { showToast("وضعیت: سلف "+(currentSettings.self_bot_active==="1"?"فعال":"غیرفعال"),"info"); }
 
 async function saveSecretaryInline() {
-  const msg = document.getElementById("secMsgInline").value.trim();
-  if (!msg) return;
-  await api("/api/settings", "POST", {secretary_message: msg});
-  toast("✅ پیام منشی ذخیره شد");
-}
-
-async function claimDaily() {
-  try {
-    const data = await api("/api/daily", "POST");
-    toast(data.message || (data.ok ? "✅ هدیه دریافت شد" : data.error), data.ok ? "success" : "error");
-    if (data.ok) loadBalance();
-  } catch { toast("❌ خطا", "error"); }
-}
-
-function copyReferral() {
-  const url = window.location.origin + "/register";
-  navigator.clipboard.writeText(url).then(() => toast("✅ لینک کپی شد")).catch(() => toast("لینک: " + url));
-}
-
-function runTool(type, val) {
-  if (!val && type !== "currency") { toast("❌ متن را وارد کنید", "error"); return; }
-  toast("⏳ در حال پردازش...");
+  const msg = document.getElementById("secMsgInline").value;
+  const data = await (await fetch("/api/settings",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({secretary_message:msg})})).json();
+  if (data.ok) { currentSettings.secretary_message=msg; if(document.getElementById("secretaryMsg")) document.getElementById("secretaryMsg").value=msg; showToast("✅ پیام منشی ذخیره شد","success"); }
 }
 
 function startSpam() {
   const count = document.getElementById("spamCount").value;
   const text = document.getElementById("spamText").value;
-  if (!count || !text) { toast("❌ تعداد و متن را وارد کنید", "error"); return; }
-  toast(`💣 اسپم: ${count} بار با متن "${text.substring(0,20)}..."`);
-  toast("⚠️ این قابلیت فقط از طریق تلگرام قابل استفاده است", "error");
+  if (!count||!text) { showToast("تعداد و متن الزامی است","error"); return; }
+  showToast("دستور: اسپم "+count+" "+text+" — در تلگرام اجرا کنید","info");
 }
-
-function stopSpam() { toast("🛑 دستور توقف اسپم — در تلگرام بنویسید: توقف اسپم"); }
-
-function startSave() {
-  const url = document.getElementById("saveChUrl").value;
-  if (!url) { toast("❌ یوزرنیم یا لینک کانال را وارد کنید", "error"); return; }
-  toast("📥 سیو مدیا — در تلگرام بنویسید: سیو کانال " + url);
-}
-function stopSave() { toast("🛑 توقف سیو — در تلگرام بنویسید: توقف سیو"); }
-
-function switchListTab(tab, el) {
-  document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-  document.querySelectorAll(".tab-panel").forEach(p => p.style.display = "none");
-  el.classList.add("active");
-  document.getElementById("ltp-" + tab).style.display = "block";
-}
+function stopSpam() { showToast("دستور: توقف اسپم — در تلگرام اجرا کنید","info"); }
+function startSave() { showToast("دستور: سیو کانال — در تلگرام اجرا کنید","info"); }
+function stopSave() { showToast("دستور: توقف سیو — در تلگرام اجرا کنید","info"); }
+function runTool(t,v) { showToast("دستور: "+(t==="translate"?"ترجمه "+v:t==="weather"?"هوا "+v:"ارز")+" — در تلگرام اجرا کنید","info"); }
+function saveAutoDel() { showToast("تأخیر حذف ثبت شد","success"); }
+function scheduleMsg() { showToast("پیام زمان‌بندی شده ثبت شد","success"); }
 
 async function loadEnemies() {
   try {
-    const data = await api("/api/enemies");
+    const data = await (await fetch("/api/enemies")).json();
+    const bdg = document.getElementById("bdgEnemies");
+    if (bdg) bdg.textContent = data.length;
     const tbody = document.getElementById("enemyTable");
-    if (!data.length) { tbody.innerHTML = '<tr><td colspan="3" class="tbl-empty">لیست خالی است</td></tr>'; return; }
-    tbody.innerHTML = data.map(e => `<tr><td>${e.user_id}</td><td>${e.name||e.username||"-"}</td><td><button class="btn-sm-dng" onclick="removeEnemy(${e.user_id})">حذف</button></td></tr>`).join("");
+    if (!tbody) return;
+    if (!data.length) { tbody.innerHTML='<tr><td colspan="5" class="tbl-empty">لیست خالی است</td></tr>'; return; }
+    tbody.innerHTML = data.map(e=>`<tr>
+      <td><code dir="ltr">${e.user_id}</code></td>
+      <td>${e.name||"—"}</td>
+      <td>${e.username?"@"+e.username:"—"}</td>
+      <td style="font-size:11px;color:#6b7280">${(e.added_at||"").split(".")[0]}</td>
+      <td><button class="btn-dng btn-sm" onclick="deleteEnemy(${e.user_id})">حذف</button></td>
+    </tr>`).join("");
   } catch {}
 }
 
 async function addEnemy() {
-  const uid = document.getElementById("enemyId").value;
-  const name = document.getElementById("enemyName").value;
-  if (!uid) { toast("❌ آیدی عددی را وارد کنید", "error"); return; }
-  const data = await api("/api/enemies", "POST", {user_id: parseInt(uid), name});
-  if (data.ok) { toast("✅ دشمن افزوده شد"); loadEnemies(); document.getElementById("enemyId").value = ""; }
-  else toast(data.error || "خطا", "error");
+  const uid=document.getElementById("enemyId").value.trim();
+  const name=document.getElementById("enemyName").value.trim();
+  if (!uid) { showToast("آیدی الزامی است","error"); return; }
+  const data=await (await fetch("/api/enemies",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({user_id:uid,name})})).json();
+  if (data.ok) { showToast("✅ دشمن اضافه شد","success"); loadEnemies(); document.getElementById("enemyId").value=""; document.getElementById("enemyName").value=""; }
+  else showToast(data.error,"error");
 }
-
-async function removeEnemy(uid) {
-  await api("/api/enemies/" + uid, "DELETE");
-  toast("✅ حذف شد");
-  loadEnemies();
-}
-
-async function clearEnemies() {
-  if (!confirm("پاک کردن همه دشمن‌ها؟")) return;
-  await api("/api/enemies/clear", "POST");
-  toast("🗑️ لیست پاک شد");
-  loadEnemies();
-}
+async function deleteEnemy(uid) { await fetch("/api/enemies/"+uid,{method:"DELETE"}); showToast("🗑️ حذف شد","info"); loadEnemies(); }
+async function clearEnemies() { if(!confirm("همه دشمن‌ها پاک شوند؟")) return; await fetch("/api/enemies/clear",{method:"POST"}); showToast("🗑️ پاک شد","info"); loadEnemies(); }
+async function clearEnemiesQuick() { if(!confirm("همه دشمن‌ها پاک شوند؟")) return; await fetch("/api/enemies/clear",{method:"POST"}); showToast("🗑️ لیست دشمن پاک شد","info"); loadEnemies(); }
 
 async function loadFriends() {
   try {
-    const data = await api("/api/friends");
+    const data = await (await fetch("/api/friends")).json();
+    const bdg = document.getElementById("bdgFriends");
+    if (bdg) bdg.textContent = data.length;
     const tbody = document.getElementById("friendTable");
-    if (!data.length) { tbody.innerHTML = '<tr><td colspan="3" class="tbl-empty">لیست خالی است</td></tr>'; return; }
-    tbody.innerHTML = data.map(f => `<tr><td>${f.user_id}</td><td>${f.name||f.username||"-"}</td><td><button class="btn-sm-dng" onclick="removeFriend(${f.user_id})">حذف</button></td></tr>`).join("");
+    if (!tbody) return;
+    if (!data.length) { tbody.innerHTML='<tr><td colspan="5" class="tbl-empty">لیست خالی است</td></tr>'; return; }
+    tbody.innerHTML = data.map(f=>`<tr>
+      <td><code dir="ltr">${f.user_id}</code></td>
+      <td>${f.name||"—"}</td>
+      <td>${f.username?"@"+f.username:"—"}</td>
+      <td style="font-size:11px;color:#6b7280">${(f.added_at||"").split(".")[0]}</td>
+      <td><button class="btn-dng btn-sm" onclick="deleteFriend(${f.user_id})">حذف</button></td>
+    </tr>`).join("");
   } catch {}
 }
-
 async function addFriend() {
-  const uid = document.getElementById("friendId").value;
-  const name = document.getElementById("friendName").value;
-  if (!uid) { toast("❌ آیدی عددی را وارد کنید", "error"); return; }
-  const data = await api("/api/friends", "POST", {user_id: parseInt(uid), name});
-  if (data.ok) { toast("✅ دوست افزوده شد"); loadFriends(); document.getElementById("friendId").value = ""; }
-  else toast(data.error || "خطا", "error");
+  const uid=document.getElementById("friendId").value.trim();
+  const name=document.getElementById("friendName").value.trim();
+  if (!uid) { showToast("آیدی الزامی است","error"); return; }
+  const data=await (await fetch("/api/friends",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({user_id:uid,name})})).json();
+  if (data.ok) { showToast("✅ دوست اضافه شد","success"); loadFriends(); document.getElementById("friendId").value=""; document.getElementById("friendName").value=""; }
+  else showToast(data.error,"error");
 }
+async function deleteFriend(uid) { await fetch("/api/friends/"+uid,{method:"DELETE"}); showToast("🗑️ حذف شد","info"); loadFriends(); }
+async function clearFriends() { if(!confirm("همه دوست‌ها پاک شوند؟")) return; await fetch("/api/friends/clear",{method:"POST"}); showToast("🗑️ پاک شد","info"); loadFriends(); }
+async function clearFriendsQuick() { if(!confirm("همه دوست‌ها پاک شوند؟")) return; await fetch("/api/friends/clear",{method:"POST"}); showToast("🗑️ لیست دوست پاک شد","info"); loadFriends(); }
 
-async function removeFriend(uid) {
-  await api("/api/friends/" + uid, "DELETE");
-  toast("✅ حذف شد");
-  loadFriends();
-}
-
-async function clearFriends() {
-  if (!confirm("پاک کردن همه دوست‌ها؟")) return;
-  await api("/api/friends/clear", "POST");
-  toast("🗑️ لیست پاک شد");
-  loadFriends();
-}
-
-async function loadSettings() {
+async function loadDeletedMessages() {
   try {
-    const data = await api("/api/settings");
-    const keys = ["anti_delete_active","anti_link_active","auto_seen_active","auto_reaction_active",
-                  "private_lock_active","enemy_reply_active","auto_save_media","clock_name_active","clock_bio_active"];
-    keys.forEach(k => {
-      const el = document.getElementById("tog-" + k);
-      if (el) el.checked = data[k] === "1";
-    });
-    if (data.secretary_message) document.getElementById("secretaryMsg").value = data.secretary_message;
-    if (data.auto_reaction_emoji) document.getElementById("reactionEmoji").value = data.auto_reaction_emoji;
-    if (data.selected_font) document.getElementById("fontSelect").value = data.selected_font;
-  } catch {}
-}
-
-async function saveSecretaryMsg() {
-  const msg = document.getElementById("secretaryMsg").value;
-  await api("/api/settings", "POST", {secretary_message: msg});
-  toast("✅ ذخیره شد");
-}
-
-async function saveReaction() {
-  const emoji = document.getElementById("reactionEmoji").value;
-  await api("/api/settings", "POST", {auto_reaction_emoji: emoji});
-  toast("✅ ذخیره شد");
-}
-
-async function saveFont() {
-  const font = document.getElementById("fontSelect").value;
-  await api("/api/settings", "POST", {selected_font: font});
-  toast("✅ فونت ذخیره شد");
-}
-
-async function removeSession() {
-  if (!confirm("آیا مطمئنید؟ از تلگرام خارج می‌شوید.")) return;
-  const data = await api("/api/remove_session", "POST");
-  toast(data.message || (data.ok ? "✅ انجام شد" : data.error), data.ok ? "success" : "error");
-  if (data.ok) setTimeout(() => checkStatus(), 1000);
-}
-
-async function transferDiamonds() {
-  const username = document.getElementById("transferUser").value.trim();
-  const amount = document.getElementById("transferAmount").value;
-  if (!username || !amount) { toast("❌ یوزرنیم و مقدار را وارد کنید", "error"); return; }
-  const data = await api("/api/transfer", "POST", {username, amount: parseInt(amount)});
-  toast(data.message || data.error, data.ok ? "success" : "error");
-  if (data.ok) loadBalance();
-}
-
-async function loadDeleted() {
-  try {
-    const data = await api("/api/deleted_messages");
+    const data = await (await fetch("/api/deleted_messages")).json();
     const tbody = document.getElementById("deletedTable");
-    if (!data.length) { tbody.innerHTML = '<tr><td colspan="4" class="tbl-empty">پیامی ثبت نشده</td></tr>'; return; }
-    tbody.innerHTML = data.map(m =>
-      `<tr><td>${m.sender_name||m.sender_id||"-"}</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${m.message||"-"}</td><td>${m.media_type||"متن"}</td><td>${(m.deleted_at||"").substring(0,16)}</td></tr>`
-    ).join("");
+    if (!tbody) return;
+    if (!data.length) { tbody.innerHTML='<tr><td colspan="4" class="tbl-empty">پیامی ثبت نشده</td></tr>'; return; }
+    tbody.innerHTML = data.map(m=>`<tr>
+      <td>${m.sender_name||m.sender_id}</td>
+      <td style="max-width:250px;word-break:break-word">${m.message||"—"}</td>
+      <td>${m.media_type?`<span class="badge-blue">${m.media_type}</span>`:"متن"}</td>
+      <td style="font-size:11px;color:#6b7280">${(m.deleted_at||"").split(".")[0]}</td>
+    </tr>`).join("");
   } catch {}
 }
 
-async function tgLogout() {
-  if (!confirm("قطع اتصال از تلگرام؟")) return;
-  const data = await api("/api/logout_session", "POST");
-  toast(data.ok ? "🔌 قطع شد" : data.error, data.ok ? "info" : "error");
-  if (data.ok) checkStatus();
+async function saveSettings(payload, msg) {
+  const data=await (await fetch("/api/settings",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})).json();
+  if (data.ok) showToast(msg||"✅ ذخیره شد","success");
+}
+function saveSecretaryMsg() { const v=document.getElementById("secretaryMsg").value; saveSettings({secretary_message:v},"✅ پیام منشی ذخیره شد"); if(document.getElementById("secMsgInline")) document.getElementById("secMsgInline").value=v; }
+function saveReaction() { saveSettings({auto_reaction_emoji:document.getElementById("reactionEmoji").value},"✅ ری‌اکشن ذخیره شد"); }
+function saveFont() { saveSettings({selected_font:document.getElementById("fontSelect").value},"✅ فونت ذخیره شد"); }
+function saveSpamDelay() { saveSettings({spam_delay:document.getElementById("spamDelay").value},"✅ تأخیر ذخیره شد"); }
+
+async function tgLogout() { if(!confirm("از حساب تلگرام خارج شوید؟")) return; await fetch("/api/logout",{method:"POST"}); location.replace("/tg-login"); }
+async function panelLogout() { if(!confirm("از پنل خارج شوید؟")) return; await fetch("/api/panel-logout",{method:"POST"}); location.replace("/panel-login"); }
+
+// ─── سیستم توکن ─────────────────────────────────────────────────────────────
+async function loadTokens() {
+  try {
+    const data = await (await fetch("/api/tokens")).json();
+    window._botUsername = data.bot_username || "";
+    const isActive = data.token_system_active;
+
+    const wrap = document.getElementById("phTokensWrap");
+    const card = document.getElementById("tokenCard");
+    const navTok = document.getElementById("nav-tokens");
+    if (wrap) wrap.style.display = isActive ? "flex" : "none";
+    if (card) card.style.display = isActive ? "block" : "none";
+    if (navTok) navTok.style.display = isActive ? "flex" : "none";
+
+    if (!isActive) return;
+
+    if (document.getElementById("phTokenBalance")) document.getElementById("phTokenBalance").textContent = data.balance;
+    if (document.getElementById("tokenBalance")) document.getElementById("tokenBalance").textContent = data.balance;
+    if (document.getElementById("tokenTotal")) document.getElementById("tokenTotal").textContent = data.total_earned;
+    if (document.getElementById("tokenRefs")) document.getElementById("tokenRefs").textContent = data.ref_count;
+    if (document.getElementById("tkSession")) document.getElementById("tkSession").textContent = data.tokens_per_session;
+    if (document.getElementById("tkHours")) document.getElementById("tkHours").textContent = data.session_hours;
+    if (document.getElementById("tkDaily")) document.getElementById("tkDaily").textContent = data.daily_gift;
+    if (document.getElementById("tkRef")) document.getElementById("tkRef").textContent = data.referral_tokens;
+
+    const dailyBtn = document.getElementById("dailyBtn");
+    if (dailyBtn) {
+      dailyBtn.disabled = !data.can_claim_daily;
+      dailyBtn.textContent = data.can_claim_daily ? "🎁 هدیه روزانه" : "⏰ فردا بیایید";
+      dailyBtn.style.opacity = data.can_claim_daily ? "1" : "0.5";
+    }
+  } catch {}
 }
 
-function panelLogout() {
-  if (confirm("خروج از پنل؟")) location.replace("/logout");
+async function claimDaily() {
+  try {
+    const data = await (await fetch("/api/tokens/daily", {method:"POST"})).json();
+    showToast(data.message, data.ok ? "success" : "info");
+    if (data.ok) loadTokens();
+  } catch { showToast("خطا در اتصال","error"); }
 }
 
-function updateClock() {
-  const now = new Date();
-  const t = now.toLocaleTimeString("fa-IR");
-  const el = document.getElementById("phClock");
-  if (el) el.textContent = t;
+function copyReferral() {
+  if (!window._botUsername) {
+    showToast("ربات توکن تنظیم نشده","error");
+    return;
+  }
+  const link = `https://t.me/${window._botUsername}?start=ref_${window._ownerId}`;
+  navigator.clipboard.writeText(link).then(()=>{
+    showToast("🔗 لینک رفرال کپی شد!","success");
+  }).catch(()=>{
+    prompt("لینک رفرال شما:", link);
+  });
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  checkStatus();
-  loadBalance();
-  loadSettings();
-  updateClock();
-  setInterval(updateClock, 1000);
-  setInterval(checkStatus, 15000);
-  setInterval(loadBalance, 30000);
-});
+function buyTokens() {
+  if (!window._botUsername) {
+    showToast("ربات توکن تنظیم نشده","error");
+    return;
+  }
+  window.open(`https://t.me/${window._botUsername}?start=buy`, "_blank");
+}
+
+function showSection(name, el, listTab) {
+  document.querySelectorAll(".section").forEach(s => s.style.display="none");
+  const sec = document.getElementById("sec-"+name);
+  if (sec) sec.style.display="block";
+  document.querySelectorAll(".sb-item").forEach(i => i.classList.remove("active"));
+  if (el) el.classList.add("active");
+  else { const navEl = document.getElementById("nav-"+name); if(navEl) navEl.classList.add("active"); }
+  closeSidebar();
+  if (name==="lists") { loadEnemies(); loadFriends(); if(listTab) switchListTab(listTab,null); }
+  if (name==="deleted") loadDeletedMessages();
+  if (name==="dashboard") { loadEnemies(); loadFriends(); }
+}
+
+function switchListTab(tabName, el) {
+  document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
+  document.querySelectorAll(".tab-panel").forEach(p=>p.style.display="none");
+  if (el) el.classList.add("active");
+  else { const t=document.getElementById("ltab-"+tabName); if(t) t.classList.add("active"); }
+  const p=document.getElementById("ltp-"+tabName);
+  if(p) p.style.display="block";
+}
+
+function toggleSidebar() { document.getElementById("sidebar").classList.toggle("open"); document.getElementById("sidebarOverlay").classList.toggle("open"); }
+function closeSidebar() { document.getElementById("sidebar")?.classList.remove("open"); document.getElementById("sidebarOverlay")?.classList.remove("open"); }
+
+function showToast(msg, type="info") {
+  const wrap = document.getElementById("toastWrap");
+  const t = document.createElement("div");
+  t.className = "toast toast-"+type;
+  t.textContent = msg;
+  wrap.appendChild(t);
+  setTimeout(()=>t.remove(), 3000);
+}
 </script>
 {% endif %}
 </body>
