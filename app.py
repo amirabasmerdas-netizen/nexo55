@@ -1,5 +1,5 @@
 # ══════════════════════════════════════════════════════════════════════════════
-# app.py - نسخه کامل با همه قابلیت‌ها
+# app.py - نسخه کامل با همه قابلیت‌ها و رفع خطاها
 # ══════════════════════════════════════════════════════════════════════════════
 
 import asyncio
@@ -177,6 +177,7 @@ def register():
                 return jsonify({"ok": False, "error": error_msg}), 400
             return render_template("register.html", error=error_msg)
         
+        # ✅ اصلاح: استفاده از username به جای name
         oid = db.create_account(username, password)
         if oid is None:
             error_msg = "این یوزرنیم قبلاً ثبت شده"
@@ -293,6 +294,7 @@ def verify_code():
         
         db.save_session(oid, sess, phone)
         db.save_telegram_user_id(oid, me.id)
+        db.set_setting(oid, "logged_in", "1")
         
         return {"ok": True, "tg_id": me.id, "first_name": me.first_name}
 
@@ -342,6 +344,7 @@ def verify_2fa():
         
         db.save_session(oid, sess, phone)
         db.save_telegram_user_id(oid, me.id)
+        db.set_setting(oid, "logged_in", "1")
         
         return {"ok": True, "tg_id": me.id, "first_name": me.first_name}
 
@@ -364,62 +367,46 @@ def tg_logout():
         pass
     
     db.delete_session(oid)
+    db.set_setting(oid, "logged_in", "0")
     return jsonify({"ok": True})
 
-# ─── API: روشن کردن سلف ─────────────────────────────────────────────────────
-@app.route("/api/start", methods=["POST"])
+# ─── API: حذف کامل سلف ──────────────────────────────────────────────────────
+@app.route("/api/remove_session", methods=["POST"])
 @login_required
-def start_bot_api():
-    oid = owner_id()
-    
-    session_data = db.get_session(oid)
-    if not session_data:
-        return jsonify({
-            "ok": False,
-            "error": "ابتدا باید وارد حساب تلگرام شوید"
-        }), 400
-    
-    try:
-        from bot import bot_manager
-        ok = bot_manager.start(oid, get_loop(), check_tokens=True)
-    except Exception as e:
-        return jsonify({"ok": False, "error": f"خطا در استارت سلف: {e}"}), 500
-    
-    if ok:
-        db.set_setting(oid, "self_bot_active", "1")
-        account = db.get_account(oid)
-        is_owner = (account and account.get("telegram_user_id") == config.OWNER_TG_ID)
-        
-        if is_owner:
-            msg = "✅ سلف روشن شد — دسترسی رایگان مالک ♾️"
-        else:
-            price = getattr(config, 'TOKENS_PER_SESSION', 2)
-            hours = getattr(config, 'SESSION_HOURS', 2)
-            msg = f"✅ سلف روشن شد — {price} الماس کسر شد — {hours} ساعت فعال است"
-        
-        return jsonify({"ok": True, "message": msg})
-    else:
-        balance = db.get_token_balance(oid)
-        price = getattr(config, 'TOKENS_PER_SESSION', 2)
-        return jsonify({
-            "ok": False,
-            "error": f"الماس کافی ندارید! موجودی: {balance} — برای روشن کردن {price} الماس لازم است.",
-        })
-
-# ─── API: خاموش کردن سلف ────────────────────────────────────────────────────
-@app.route("/api/stop", methods=["POST"])
-@login_required
-def stop_bot_api():
+def remove_session():
+    """
+    حذف کامل سشن و خارج کردن کاربر از سلف
+    این کار باعث می‌شود کاربر از حساب تلگرام خارج شود
+    و تمام داده‌های سشن پاک شود
+    """
     oid = owner_id()
     
     try:
+        # 1. توقف سلف‌بات اگر در حال اجراست
         from bot import bot_manager
         bot_manager.stop(oid)
     except:
         pass
     
-    db.set_setting(oid, "self_bot_active", "0")
-    return jsonify({"ok": True})
+    try:
+        # 2. حذف سشن از دیتابیس
+        db.delete_session(oid)
+        
+        # 3. غیرفعال کردن وضعیت لاگین
+        db.set_setting(oid, "logged_in", "0")
+        
+        # 4. غیرفعال کردن سلف
+        db.set_setting(oid, "self_bot_active", "0")
+        
+        return jsonify({
+            "ok": True,
+            "message": "✅ سلف با موفقیت حذف شد!\nشما از حساب تلگرام خارج شدید."
+        })
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "error": f"خطا در حذف سلف: {str(e)}"
+        }), 500
 
 # ─── API: وضعیت سشن ─────────────────────────────────────────────────────────
 @app.route("/api/session/status")
@@ -439,6 +426,28 @@ def session_status():
         "running": is_running
     })
 
+# ─── API: وضعیت حذف سلف ────────────────────────────────────────────────────
+@app.route("/api/session/remove_status")
+@login_required
+def remove_status():
+    """بررسی اینکه آیا کاربر می‌تواند سلف را حذف کند"""
+    oid = owner_id()
+    has_session = db.get_session(oid) is not None
+    is_running = False
+    
+    try:
+        from bot import bot_manager
+        is_running = bot_manager.is_running(oid)
+    except:
+        pass
+    
+    return jsonify({
+        "ok": True,
+        "has_session": has_session,
+        "is_running": is_running,
+        "can_remove": has_session or is_running
+    })
+
 # ─── API: اطلاعات کاربر ─────────────────────────────────────────────────────
 @app.route("/api/me")
 @login_required
@@ -455,6 +464,7 @@ def api_me():
         "username": account["username"],
         "balance": db.get_token_balance(oid),
         "has_session": db.get_session(oid) is not None,
+        "telegram_id": account.get("telegram_user_id"),
     })
 
 # ─── API: موجودی ────────────────────────────────────────────────────────────
@@ -518,6 +528,61 @@ def toggle(key):
     db.set_setting(owner_id(), key, new_val)
     return jsonify({"ok": True, "active": new_val == "1"})
 
+# ─── API: روشن کردن سلف ─────────────────────────────────────────────────────
+@app.route("/api/start", methods=["POST"])
+@login_required
+def start_bot_api():
+    oid = owner_id()
+    
+    session_data = db.get_session(oid)
+    if not session_data:
+        return jsonify({
+            "ok": False,
+            "error": "ابتدا باید وارد حساب تلگرام شوید"
+        }), 400
+    
+    try:
+        from bot import bot_manager
+        ok = bot_manager.start(oid, get_loop(), check_tokens=True)
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"خطا در استارت سلف: {e}"}), 500
+    
+    if ok:
+        db.set_setting(oid, "self_bot_active", "1")
+        account = db.get_account(oid)
+        is_owner = (account and account.get("telegram_user_id") == config.OWNER_TG_ID)
+        
+        if is_owner:
+            msg = "✅ سلف روشن شد — دسترسی رایگان مالک ♾️"
+        else:
+            price = getattr(config, 'TOKENS_PER_SESSION', 2)
+            hours = getattr(config, 'SESSION_HOURS', 2)
+            msg = f"✅ سلف روشن شد — {price} الماس کسر شد — {hours} ساعت فعال است"
+        
+        return jsonify({"ok": True, "message": msg})
+    else:
+        balance = db.get_token_balance(oid)
+        price = getattr(config, 'TOKENS_PER_SESSION', 2)
+        return jsonify({
+            "ok": False,
+            "error": f"الماس کافی ندارید! موجودی: {balance} — برای روشن کردن {price} الماس لازم است.",
+        })
+
+# ─── API: خاموش کردن سلف ────────────────────────────────────────────────────
+@app.route("/api/stop", methods=["POST"])
+@login_required
+def stop_bot_api():
+    oid = owner_id()
+    
+    try:
+        from bot import bot_manager
+        bot_manager.stop(oid)
+    except:
+        pass
+    
+    db.set_setting(oid, "self_bot_active", "0")
+    return jsonify({"ok": True})
+
 # ─── API: انتقال الماس ──────────────────────────────────────────────────────
 @app.route("/api/transfer", methods=["POST"])
 @login_required
@@ -545,15 +610,15 @@ def api_transfer():
     if to_account["id"] == oid:
         return jsonify({"ok": False, "error": "نمی‌توانید به خودتان الماس انتقال دهید"}), 400
     
-    success = db.transfer_tokens(oid, to_account["telegram_user_id"], amount)
+    success, msg = db.transfer_diamonds(oid, to_account["id"], amount)
     if success:
         return jsonify({
             "ok": True,
-            "message": f"✅ {amount} الماس به {username} انتقال یافت",
+            "message": msg,
             "new_balance": db.get_token_balance(oid)
         })
     else:
-        return jsonify({"ok": False, "error": "خطا در انتقال الماس"}), 500
+        return jsonify({"ok": False, "error": msg}), 500
 
 # ─── API: هدیه روزانه ───────────────────────────────────────────────────────
 @app.route("/api/daily", methods=["POST"])
@@ -674,7 +739,7 @@ def remove_forced_channel(username):
         return jsonify({"ok": True})
     return jsonify({"ok": False, "error": "کانال یافت نشد"})
 
-# ─── API: قرعه‌کشی ──────────────────────────────────────────────────────────
+# ─── API: قرعه‌کشی (مالک) ──────────────────────────────────────────────────
 @app.route("/api/lottery", methods=["POST"])
 @login_required
 def create_lottery():
@@ -693,17 +758,51 @@ def create_lottery():
     group = getattr(config, 'WORLD_CUP_GROUP', '@amelselfgap')
     lottery_id = db.create_lottery(0, config.OWNER_TG_ID, prize, 2, prize)
     
+    if lottery_id:
+        return jsonify({
+            "ok": True,
+            "lottery_id": lottery_id,
+            "message": f"✅ قرعه‌کشی با جایزه {prize} الماس ایجاد شد"
+        })
+    else:
+        return jsonify({
+            "ok": False,
+            "error": "خطا در ایجاد قرعه‌کشی"
+        }), 500
+
+# ─── API: دریافت لیست قرعه‌کشی‌ها (مالک) ──────────────────────────────────
+@app.route("/api/lotteries", methods=["GET"])
+@login_required
+def get_lotteries():
+    oid = owner_id()
+    account = db.get_account(oid)
+    
+    if not account or account.get("telegram_user_id") != config.OWNER_TG_ID:
+        return jsonify({"ok": False, "error": "فقط مالک"}), 403
+    
+    # دریافت قرعه‌کشی‌های فعال
+    active_lotteries = []
+    try:
+        # این تابع باید در database_supabase.py اضافه شود
+        # فعلاً یک لیست خالی برمی‌گردانیم
+        pass
+    except:
+        pass
+    
     return jsonify({
         "ok": True,
-        "lottery_id": lottery_id,
-        "message": f"✅ قرعه‌کشی با جایزه {prize} الماس ایجاد شد"
+        "lotteries": active_lotteries
     })
 
 # ─── اجرا ───────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     # استارت ربات تلگرام
-    from telegram_bot import start_token_bot
-    start_token_bot()
+    try:
+        from telegram_bot import start_token_bot
+        start_token_bot()
+        print("✅ ربات تلگرام استارت شد")
+    except Exception as e:
+        print(f"❌ خطا در استارت ربات تلگرام: {e}")
     
     # استارت خودکار سلف‌بات‌های فعال
     loop = get_loop()
@@ -725,4 +824,5 @@ if __name__ == "__main__":
     
     print(f"✅ {started_count} سلف‌بات فعال شد")
     
+    # اجرای Flask
     app.run(host="0.0.0.0", port=config.PORT, debug=False, threaded=True)
