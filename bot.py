@@ -46,16 +46,35 @@ FRIEND_COOLDOWN = 3600      # 1 ساعت
 # ─── کش کاربران ──────────────────────────────────────────────────────────────
 _user_cache = {}
 _user_cache_time = {}
-_CACHE_TTL = 60
+_user_cache_lock = threading.Lock()
+_CACHE_TTL = 120
+_MAX_USER_CACHE = 100
 
 def get_cached_user(tg_id: int):
     now = time.time()
-    if tg_id in _user_cache and (now - _user_cache_time.get(tg_id, 0) < _CACHE_TTL):
-        return _user_cache[tg_id]
-    account = db.get_account_by_tg_id(tg_id)
-    _user_cache[tg_id] = account
-    _user_cache_time[tg_id] = now
-    return account
+    
+    with _user_cache_lock:
+        # بررسی کش
+        if tg_id in _user_cache:
+            if now - _user_cache_time.get(tg_id, 0) < _CACHE_TTL:
+                return _user_cache[tg_id]
+            else:
+                del _user_cache[tg_id]
+                del _user_cache_time[tg_id]
+        
+        # محدود کردن اندازه کش
+        if len(_user_cache) >= _MAX_USER_CACHE:
+            oldest = min(_user_cache_time, key=_user_cache_time.get)
+            del _user_cache[oldest]
+            del _user_cache_time[oldest]
+        
+        # دریافت از دیتابیس
+        account = db.get_account_by_tg_id(tg_id)
+        if account:
+            _user_cache[tg_id] = account
+            _user_cache_time[tg_id] = now
+        
+        return account
 
 def _convert_font(text, chars):
     result = []
@@ -81,58 +100,74 @@ class BotManager:
     def __init__(self):
         self._bots = {}
         self._timers = {}
+        self._lock = threading.Lock()
 
     def is_running(self, owner_id: int) -> bool:
-        entry = self._bots.get(owner_id)
-        return bool(entry and not entry["task"].done())
+        with self._lock:
+            entry = self._bots.get(owner_id)
+            return bool(entry and not entry["task"].done())
 
     def get_client(self, owner_id: int):
-        entry = self._bots.get(owner_id)
-        return entry["client"] if entry else None
+        with self._lock:
+            entry = self._bots.get(owner_id)
+            return entry["client"] if entry else None
 
     def _cancel_timer(self, owner_id: int):
-        t = self._timers.pop(owner_id, None)
-        if t:
-            t.cancel()
+        with self._lock:
+            t = self._timers.pop(owner_id, None)
+            if t:
+                t.cancel()
 
     def session_end_time(self, owner_id: int):
-        t = self._timers.get(owner_id)
-        if t and t.is_alive():
-            remaining = t.interval - (time.time() - t._timer_start if hasattr(t, '_timer_start') else 0)
-            return max(0, remaining)
+        with self._lock:
+            t = self._timers.get(owner_id)
+            if t and t.is_alive():
+                remaining = t.interval - (time.time() - t._timer_start if hasattr(t, '_timer_start') else 0)
+                return max(0, remaining)
         return None
 
     def start(self, owner_id: int, loop: asyncio.AbstractEventLoop, check_tokens: bool = True) -> bool:
-        if self.is_running(owner_id):
-            self.stop(owner_id)
+        with self._lock:
+            if self.is_running(owner_id):
+                self._stop_internal(owner_id)
 
-        tg_id = db.get_telegram_id_by_owner(owner_id)
-        is_owner = (tg_id is not None and tg_id == config.OWNER_TG_ID)
+            tg_id = db.get_telegram_id_by_owner(owner_id)
+            is_owner = (tg_id is not None and tg_id == config.OWNER_TG_ID)
 
-        tokens_deducted = 0
-        if config.BOT_TOKEN and check_tokens and not is_owner:
-            balance = db.get_token_balance(owner_id)
-            if balance < config.TOKENS_PER_SESSION:
-                return False
-            db.deduct_tokens(owner_id, config.TOKENS_PER_SESSION)
-            tokens_deducted = config.TOKENS_PER_SESSION
+            tokens_deducted = 0
+            if config.BOT_TOKEN and check_tokens and not is_owner:
+                balance = db.get_token_balance(owner_id)
+                if balance < config.TOKENS_PER_SESSION:
+                    return False
+                db.deduct_tokens(owner_id, config.TOKENS_PER_SESSION)
+                tokens_deducted = config.TOKENS_PER_SESSION
 
-        entry = {"client": None, "task": None, "stop": False, "is_owner": is_owner,
-                 "tokens_deducted": tokens_deducted, "owner_refunded": False}
-        self._bots[owner_id] = entry
+            entry = {
+                "client": None, 
+                "task": None, 
+                "stop": False, 
+                "is_owner": is_owner,
+                "tokens_deducted": tokens_deducted, 
+                "owner_refunded": False,
+                "last_ping": time.time()
+            }
+            self._bots[owner_id] = entry
+            
         task = asyncio.run_coroutine_threadsafe(
             self._run_bot(owner_id), loop
         )
-        entry["task"] = task
+        with self._lock:
+            entry["task"] = task
 
-        if config.BOT_TOKEN and not is_owner:
-            self._cancel_timer(owner_id)
-            timer = threading.Timer(
-                config.SESSION_HOURS * 3600, self._session_expired, args=[owner_id]
-            )
-            timer.daemon = True
-            timer.start()
-            self._timers[owner_id] = timer
+            if config.BOT_TOKEN and not is_owner:
+                self._cancel_timer(owner_id)
+                timer = threading.Timer(
+                    config.SESSION_HOURS * 3600, self._session_expired, args=[owner_id]
+                )
+                timer.daemon = True
+                timer._timer_start = time.time()
+                timer.start()
+                self._timers[owner_id] = timer
 
         return True
 
@@ -141,8 +176,7 @@ class BotManager:
         self.stop(owner_id)
         db.set_setting(owner_id, "self_bot_active", "0")
 
-    def stop(self, owner_id: int):
-        self._cancel_timer(owner_id)
+    def _stop_internal(self, owner_id: int):
         entry = self._bots.get(owner_id)
         if not entry:
             return
@@ -154,9 +188,15 @@ class BotManager:
             except Exception:
                 pass
 
+    def stop(self, owner_id: int):
+        with self._lock:
+            self._cancel_timer(owner_id)
+            self._stop_internal(owner_id)
+
     def stop_all(self):
-        for oid in list(self._bots.keys()):
-            self.stop(oid)
+        with self._lock:
+            for oid in list(self._bots.keys()):
+                self._stop_internal(oid)
 
     async def _run_bot(self, owner_id: int):
         entry = self._bots[owner_id]
@@ -170,16 +210,15 @@ class BotManager:
                     await asyncio.sleep(10)
                     continue
 
-                # ✅ تنظیمات بهینه برای اتصال پایدار (بدون receive_timeout و send_timeout)
                 cl = TelegramClient(
                     StringSession(session_data),
                     config.API_ID,
                     config.API_HASH,
-                    connection_retries=5,
-                    retry_delay=3,
-                    timeout=30,
+                    connection_retries=3,
+                    retry_delay=2,
+                    timeout=20,
                     auto_reconnect=True,
-                    flood_sleep_threshold=60,
+                    flood_sleep_threshold=30,
                     device_model="AMEL SELF55",
                     system_version="1.0.0",
                     app_version="1.2.0"
@@ -213,7 +252,7 @@ class BotManager:
                             logger.error(f"🛑 [{owner_id}] بیش از 5 بار خطای اتصال، متوقف شد.")
                             entry["stop"] = True
                             break
-                        await asyncio.sleep(min(consecutive_failures * 15, 60))
+                        await asyncio.sleep(min(consecutive_failures * 10, 60))
                         continue
                         
                     await asyncio.sleep(10)
@@ -257,7 +296,7 @@ class BotManager:
                 # استارت تسک‌های پس‌زمینه
                 clock_task = asyncio.ensure_future(_clock_loop(cl, owner_id))
                 sched_task = asyncio.ensure_future(_scheduler_loop(cl, owner_id))
-                keep_alive_task = asyncio.ensure_future(_keep_alive_loop(cl, owner_id))
+                keep_alive_task = asyncio.ensure_future(_keep_alive_loop(cl, owner_id, entry))
                 
                 math_task = None
                 if owner_id == 1 or is_now_owner:
@@ -287,23 +326,24 @@ class BotManager:
                     break
 
             await asyncio.sleep(retry_delay)
-            retry_delay = min(retry_delay * 2, 60)
+            retry_delay = min(retry_delay * 1.5, 30)
 
         logger.info(f"🛑 [{owner_id}] بات متوقف شد.")
 
 bot_manager = BotManager()
 
 # ─── حلقه Keep-Alive ──────────────────────────────────────────────────────────
-async def _keep_alive_loop(cl, owner_id):
-    """حلقه نگهداری اتصال با ارسال پینگ هر 30 ثانیه"""
+async def _keep_alive_loop(cl, owner_id, entry):
+    """حلقه نگهداری اتصال با ارسال پینگ هر 60 ثانیه"""
     while True:
         try:
             if cl and cl.is_connected():
                 await cl.get_me()
-            await asyncio.sleep(30)
+                entry["last_ping"] = time.time()
+            await asyncio.sleep(60)
         except Exception as e:
             logger.warning(f"⚠️ [{owner_id}] خطا در keep_alive: {e}")
-            await asyncio.sleep(10)
+            await asyncio.sleep(30)
 
 # ─── ثبت هندلرها (per-user) ────────────────────────────────────────────────────
 def _register_handlers(cl: TelegramClient, owner_id: int, entry: dict):
@@ -1059,8 +1099,12 @@ def _help_text():
 
 # ─── حلقه‌های پس‌زمینه ──────────────────────────────────────────────────────────
 async def _clock_loop(cl, owner_id):
-    """به‌روزرسانی ساعت نام/بیو با دقت بالا"""
+    """به‌روزرسانی ساعت نام/بیو با دقت بالا و بهینه"""
     last_minute = -1
+    last_styled_time = ""
+    last_font_id = None
+    last_name_active = None
+    last_bio_active = None
     
     while True:
         try:
@@ -1068,35 +1112,64 @@ async def _clock_loop(cl, owner_id):
             now = datetime.datetime.now(iran_tz)
             current_minute = now.minute
             
-            if current_minute != last_minute:
-                last_minute = current_minute
-                time_str = f"{now.hour:02d}:{now.minute:02d}"
-                
-                font_id = db.get_setting(owner_id, "selected_font", "0")
-                fn = FONTS.get(font_id, FONTS["0"])
-                styled_time = fn(time_str)
-                
-                if db.get_setting(owner_id, "clock_name_active") == "1":
-                    try:
-                        await cl(UpdateProfileRequest(last_name=styled_time[:64]))
-                        logger.info(f"⏰ [{owner_id}] ساعت نام به‌روز شد: {styled_time}")
-                    except Exception as e:
-                        logger.warning(f"❌ خطا در به‌روزرسانی نام: {e}")
-                
-                if db.get_setting(owner_id, "clock_bio_active") == "1":
-                    try:
-                        await cl(UpdateProfileRequest(about=f"⏰ {styled_time}"[:70]))
-                        logger.info(f"⏰ [{owner_id}] ساعت بیو به‌روز شد: {styled_time}")
-                    except Exception as e:
-                        logger.warning(f"❌ خطا در به‌روزرسانی بیو: {e}")
+            # فقط اگر دقیقه تغییر کرده باشد، به‌روزرسانی کن
+            if current_minute == last_minute:
+                await asyncio.sleep(10)
+                continue
             
-            await asyncio.sleep(5)
+            last_minute = current_minute
+            time_str = f"{now.hour:02d}:{now.minute:02d}"
+            
+            # خواندن تنظیمات از کش
+            font_id = db.get_setting(owner_id, "selected_font", "0")
+            name_active = db.get_setting(owner_id, "clock_name_active") == "1"
+            bio_active = db.get_setting(owner_id, "clock_bio_active") == "1"
+            
+            # فقط در صورت تغییر فونت، دوباره اعمال کن
+            if font_id != last_font_id:
+                last_font_id = font_id
+                fn = FONTS.get(font_id, FONTS["0"])
+                last_styled_time = fn(time_str)
+            else:
+                # فقط زمان را به‌روزرسانی کن (با فونت قبلی)
+                fn = FONTS.get(font_id, FONTS["0"])
+                last_styled_time = fn(time_str)
+            
+            # فقط در صورت تغییر وضعیت، به‌روزرسانی کن
+            if name_active and name_active != last_name_active:
+                last_name_active = name_active
+                try:
+                    await cl(UpdateProfileRequest(last_name=last_styled_time[:64]))
+                    logger.info(f"⏰ [{owner_id}] ساعت نام به‌روز شد: {last_styled_time}")
+                except Exception as e:
+                    logger.warning(f"❌ خطا در نام: {e}")
+            elif name_active:
+                try:
+                    await cl(UpdateProfileRequest(last_name=last_styled_time[:64]))
+                except Exception as e:
+                    logger.warning(f"❌ خطا در نام: {e}")
+            
+            if bio_active and bio_active != last_bio_active:
+                last_bio_active = bio_active
+                try:
+                    await cl(UpdateProfileRequest(about=f"⏰ {last_styled_time}"[:70]))
+                    logger.info(f"⏰ [{owner_id}] ساعت بیو به‌روز شد: {last_styled_time}")
+                except Exception as e:
+                    logger.warning(f"❌ خطا در بیو: {e}")
+            elif bio_active:
+                try:
+                    await cl(UpdateProfileRequest(about=f"⏰ {last_styled_time}"[:70]))
+                except Exception as e:
+                    logger.warning(f"❌ خطا در بیو: {e}")
+            
+            await asyncio.sleep(30)  # افزایش فاصله به 30 ثانیه
             
         except Exception as e:
             logger.error(f"❌ خطا در _clock_loop: {e}")
-            await asyncio.sleep(10)
+            await asyncio.sleep(30)
 
 async def _scheduler_loop(cl, owner_id):
+    """حلقه ارسال پیام‌های زمان‌بندی شده"""
     while True:
         try:
             for p in db.get_pending_scheduled(owner_id):
@@ -1118,7 +1191,7 @@ async def _math_challenge_loop(cl, owner_id):
         try:
             settings = db.get_challenge_settings(owner_id)
             if not settings.get('math_challenge_active', False):
-                await asyncio.sleep(30)
+                await asyncio.sleep(60)
                 continue
             
             operations = ['+', '-', '×']
