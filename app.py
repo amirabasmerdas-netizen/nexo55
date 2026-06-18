@@ -244,12 +244,7 @@ def register():
 # ─── خروج ───────────────────────────────────────────────────────────────────
 @app.route("/logout")
 def logout():
-    oid = session.get("owner_id")
-    if oid:
-        try:
-            db.delete_session(oid)
-        except:
-            pass
+    # فقط session پنل پاک می‌شود — session تلگرام دست‌نخورده می‌ماند
     session.pop("owner_id", None)
     return redirect(url_for("login"))
 
