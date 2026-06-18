@@ -1,3 +1,7 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# app.py - نسخه کامل با همه قابلیت‌ها
+# ══════════════════════════════════════════════════════════════════════════════
+
 import asyncio
 import os
 import threading
@@ -46,7 +50,6 @@ _login_clients = {}
 _phone_hashes = {}
 _phone_numbers = {}
 
-
 def get_loop():
     global _loop
     if _loop is None or _loop.is_closed():
@@ -55,10 +58,8 @@ def get_loop():
         t.start()
     return _loop
 
-
 def run_async(coro):
     return asyncio.run_coroutine_threadsafe(coro, get_loop()).result(timeout=60)
-
 
 # ─── احراز هویت ────────────────────────────────────────────────────────────
 def login_required(f):
@@ -71,21 +72,17 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated
 
-
 def owner_id() -> int:
     return int(session["owner_id"])
-
 
 # ─── Keep-Alive ─────────────────────────────────────────────────────────────
 @app.route("/ping")
 def ping():
     return "pong", 200
 
-
 @app.route("/health")
 def health():
     return jsonify({"status": "ok", "bot": config.BOT_NAME}), 200
-
 
 # ─── صفحه اصلی ──────────────────────────────────────────────────────────────
 @app.route("/")
@@ -109,7 +106,6 @@ def index():
         balance=balance,
         has_session=has_session,
     )
-
 
 # ─── ورود ───────────────────────────────────────────────────────────────────
 @app.route("/login", methods=["GET", "POST"])
@@ -147,7 +143,6 @@ def login():
         return redirect(url_for("index"))
     
     return render_template("login.html")
-
 
 # ─── ثبت‌نام ─────────────────────────────────────────────────────────────────
 @app.route("/register", methods=["GET", "POST"])
@@ -198,7 +193,6 @@ def register():
     
     return render_template("register.html")
 
-
 # ─── خروج ───────────────────────────────────────────────────────────────────
 @app.route("/logout")
 def logout():
@@ -210,7 +204,6 @@ def logout():
             pass
     session.pop("owner_id", None)
     return redirect(url_for("login"))
-
 
 # ─── صفحه اتصال تلگرام ──────────────────────────────────────────────────────
 @app.route("/tg-login")
@@ -224,7 +217,6 @@ def tg_login_page():
         return redirect(url_for("login"))
     
     return render_template("tg_login.html", username=account["username"])
-
 
 # ─── API: ارسال کد تأیید ────────────────────────────────────────────────────
 @app.route("/api/login/send_code", methods=["POST"])
@@ -264,7 +256,6 @@ def send_code():
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
-
 # ─── API: تأیید کد ──────────────────────────────────────────────────────────
 @app.route("/api/login/verify_code", methods=["POST"])
 @login_required
@@ -300,7 +291,6 @@ def verify_code():
         _phone_hashes.pop(oid, None)
         _phone_numbers.pop(oid, None)
         
-        # ذخیره سشن در دیتابیس
         db.save_session(oid, sess, phone)
         db.save_telegram_user_id(oid, me.id)
         
@@ -315,7 +305,6 @@ def verify_code():
         return jsonify({"ok": False, "error": "کد اشتباه یا منقضی شده"}), 400
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
-
 
 # ─── API: تأیید رمز دومرحله‌ای ──────────────────────────────────────────────
 @app.route("/api/login/verify_2fa", methods=["POST"])
@@ -362,7 +351,6 @@ def verify_2fa():
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
-
 # ─── API: خروج از سشن تلگرام ───────────────────────────────────────────────
 @app.route("/api/logout_session", methods=["POST"])
 @login_required
@@ -377,7 +365,6 @@ def tg_logout():
     
     db.delete_session(oid)
     return jsonify({"ok": True})
-
 
 # ─── API: روشن کردن سلف ─────────────────────────────────────────────────────
 @app.route("/api/start", methods=["POST"])
@@ -419,7 +406,6 @@ def start_bot_api():
             "error": f"الماس کافی ندارید! موجودی: {balance} — برای روشن کردن {price} الماس لازم است.",
         })
 
-
 # ─── API: خاموش کردن سلف ────────────────────────────────────────────────────
 @app.route("/api/stop", methods=["POST"])
 @login_required
@@ -434,7 +420,6 @@ def stop_bot_api():
     
     db.set_setting(oid, "self_bot_active", "0")
     return jsonify({"ok": True})
-
 
 # ─── API: وضعیت سشن ─────────────────────────────────────────────────────────
 @app.route("/api/session/status")
@@ -454,7 +439,6 @@ def session_status():
         "running": is_running
     })
 
-
 # ─── API: اطلاعات کاربر ─────────────────────────────────────────────────────
 @app.route("/api/me")
 @login_required
@@ -473,7 +457,6 @@ def api_me():
         "has_session": db.get_session(oid) is not None,
     })
 
-
 # ─── API: موجودی ────────────────────────────────────────────────────────────
 @app.route("/api/balance")
 @login_required
@@ -483,7 +466,6 @@ def api_balance():
         "ok": True,
         "balance": db.get_token_balance(oid)
     })
-
 
 # ─── API: تنظیمات ───────────────────────────────────────────────────────────
 @app.route("/api/settings", methods=["GET"])
@@ -498,7 +480,6 @@ def get_settings():
         "secretary_message", "auto_reaction_emoji",
     ]
     return jsonify({k: db.get_setting(oid, k) for k in keys})
-
 
 @app.route("/api/settings", methods=["POST"])
 @login_required
@@ -521,7 +502,6 @@ def update_settings():
             db.set_setting(oid, k, str(data[k]))
     return jsonify({"ok": True})
 
-
 @app.route("/api/toggle/<key>", methods=["POST"])
 @login_required
 def toggle(key):
@@ -537,7 +517,6 @@ def toggle(key):
     new_val = "0" if current == "1" else "1"
     db.set_setting(owner_id(), key, new_val)
     return jsonify({"ok": True, "active": new_val == "1"})
-
 
 # ─── API: انتقال الماس ──────────────────────────────────────────────────────
 @app.route("/api/transfer", methods=["POST"])
@@ -576,7 +555,6 @@ def api_transfer():
     else:
         return jsonify({"ok": False, "error": "خطا در انتقال الماس"}), 500
 
-
 # ─── API: هدیه روزانه ───────────────────────────────────────────────────────
 @app.route("/api/daily", methods=["POST"])
 @login_required
@@ -588,7 +566,6 @@ def claim_daily():
         "message": message,
         "balance": db.get_token_balance(oid) if success else None
     })
-
 
 # ─── API: آمار (مالک) ───────────────────────────────────────────────────────
 @app.route("/api/admin/stats")
@@ -602,14 +579,13 @@ def admin_stats():
     
     accounts = db.get_all_accounts()
     total_users = len(accounts)
-    total_balance = sum(a.get("balance", 0) for a in accounts) if accounts else 0
+    total_balance = sum(db.get_token_balance(a["id"]) for a in accounts) if accounts else 0
     
     return jsonify({
         "ok": True,
         "total_users": total_users,
         "total_balance": total_balance,
     })
-
 
 # ─── API: لیست کاربران (مالک) ───────────────────────────────────────────────
 @app.route("/api/admin/users")
@@ -622,11 +598,20 @@ def admin_users():
         return jsonify({"ok": False, "error": "فقط مالک"}), 403
     
     accounts = db.get_all_accounts()[:50]
+    user_list = []
+    for acc in accounts:
+        user_list.append({
+            "id": acc["id"],
+            "username": acc["username"],
+            "balance": db.get_token_balance(acc["id"]),
+            "has_session": db.get_session(acc["id"]) is not None,
+            "created_at": acc.get("created_at"),
+        })
+    
     return jsonify({
         "ok": True,
-        "users": accounts
+        "users": user_list
     })
-
 
 # ─── API: دادن الماس (مالک) ─────────────────────────────────────────────────
 @app.route("/api/admin/give", methods=["POST"])
@@ -665,13 +650,11 @@ def admin_give():
         "new_balance": db.get_token_balance(to_account["id"])
     })
 
-
 # ─── API: چنل‌های اجباری ───────────────────────────────────────────────────
 @app.route("/api/forced_channels", methods=["GET"])
 @login_required
 def get_forced_channels():
     return jsonify(cache.get_forced_channels())
-
 
 @app.route("/api/forced_channels", methods=["POST"])
 @login_required
@@ -684,7 +667,6 @@ def add_forced_channel():
         return jsonify({"ok": True})
     return jsonify({"ok": False, "error": "خطا یا کانال تکراری است"})
 
-
 @app.route("/api/forced_channels/<username>", methods=["DELETE"])
 @login_required
 def remove_forced_channel(username):
@@ -692,6 +674,30 @@ def remove_forced_channel(username):
         return jsonify({"ok": True})
     return jsonify({"ok": False, "error": "کانال یافت نشد"})
 
+# ─── API: قرعه‌کشی ──────────────────────────────────────────────────────────
+@app.route("/api/lottery", methods=["POST"])
+@login_required
+def create_lottery():
+    oid = owner_id()
+    account = db.get_account(oid)
+    
+    if not account or account.get("telegram_user_id") != config.OWNER_TG_ID:
+        return jsonify({"ok": False, "error": "فقط مالک"}), 403
+    
+    data = request.json or {}
+    prize = data.get("prize", 0)
+    
+    if prize <= 0:
+        return jsonify({"ok": False, "error": "مبلغ جایزه باید بیشتر از 0 باشد"}), 400
+    
+    group = getattr(config, 'WORLD_CUP_GROUP', '@amelselfgap')
+    lottery_id = db.create_lottery(0, config.OWNER_TG_ID, prize, 2, prize)
+    
+    return jsonify({
+        "ok": True,
+        "lottery_id": lottery_id,
+        "message": f"✅ قرعه‌کشی با جایزه {prize} الماس ایجاد شد"
+    })
 
 # ─── اجرا ───────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
