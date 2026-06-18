@@ -1,3 +1,7 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# database_supabase.py - نسخه کامل با همه توابع
+# ══════════════════════════════════════════════════════════════════════════════
+
 import os, json, hashlib, datetime, psycopg2, psycopg2.extras, psycopg2.pool, time, threading
 from typing import Optional, Dict, List, Any
 from config import DATABASE_URL
@@ -296,7 +300,7 @@ def get_telegram_id_by_owner(owner_id: int) -> Optional[int]:
     except: return None
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 🆕 Session‌ها
+# Session‌ها
 # ══════════════════════════════════════════════════════════════════════════════
 def save_session(owner_id: int, session_data: str, phone: str = None) -> bool:
     try:
@@ -857,66 +861,172 @@ def transfer_diamonds(from_id, to_id, amount):
 # 🆕 قرعه‌کشی
 # ══════════════════════════════════════════════════════════════════════════════
 def create_lottery(chat_id, creator_tg_id, prize_amount, duration_minutes, entry_fee=1):
+    """ایجاد قرعه‌کشی جدید"""
     try:
         end_time = datetime.datetime.now() + datetime.timedelta(minutes=duration_minutes)
-        result = execute_query("""INSERT INTO amel_lotteries (chat_id, creator_tg_id, prize_amount, entry_fee, end_time, status)
-            VALUES (%s, %s, %s, %s, %s, 'active') RETURNING id""",
-            (chat_id, creator_tg_id, prize_amount, entry_fee, end_time.isoformat()), fetch_one=True)
-        return result['id'] if result else None
-    except: return None
+        result = execute_query(
+            """INSERT INTO amel_lotteries (chat_id, creator_tg_id, prize_amount, entry_fee, end_time, status, created_at)
+            VALUES (%s, %s, %s, %s, %s, 'active', %s) RETURNING id""",
+            (chat_id, creator_tg_id, prize_amount, entry_fee, end_time.isoformat(), datetime.datetime.now().isoformat()),
+            fetch_one=True
+        )
+        if result:
+            invalidate_cache("lottery_")
+            return result['id']
+        return None
+    except Exception as e:
+        print(f"❌ create_lottery error: {e}")
+        return None
 
 def update_lottery_message(lottery_id, message_id):
+    """به‌روزرسانی پیام قرعه‌کشی"""
     try:
-        execute_query("UPDATE amel_lotteries SET message_id = %s WHERE id = %s", (message_id, lottery_id))
+        execute_query(
+            "UPDATE amel_lotteries SET message_id = %s WHERE id = %s",
+            (message_id, lottery_id)
+        )
+        invalidate_cache(f"lottery_{lottery_id}")
         return True
-    except: return False
+    except:
+        return False
 
 def get_lottery(lottery_id):
+    """دریافت اطلاعات قرعه‌کشی"""
     try:
-        return cached_query(f"lottery_{lottery_id}",
-            "SELECT * FROM amel_lotteries WHERE id = %s", (lottery_id,), fetch_one=True, ttl=10)
-    except: return None
+        return cached_query(
+            f"lottery_{lottery_id}",
+            "SELECT * FROM amel_lotteries WHERE id = %s",
+            (lottery_id,), fetch_one=True, ttl=10
+        )
+    except:
+        return None
+
+def get_active_lottery_by_chat(chat_id):
+    """دریافت قرعه‌کشی فعال در چت"""
+    try:
+        return cached_query(
+            f"lottery_active_{chat_id}",
+            "SELECT * FROM amel_lotteries WHERE chat_id = %s AND status = 'active' ORDER BY created_at DESC LIMIT 1",
+            (chat_id,), fetch_one=True, ttl=5
+        )
+    except:
+        return None
 
 def join_lottery(lottery_id, user_tg_id, owner_id, entry_fee=None):
+    """شرکت در قرعه‌کشی"""
     try:
-        _init_tokens(owner_id)
         lottery = get_lottery(lottery_id)
         if not lottery or lottery['status'] != 'active':
             return False, "❌ قرعه‌کشی فعال نیست"
+        
         if entry_fee is None:
             entry_fee = lottery['entry_fee']
+        
+        # بررسی موجودی
         balance = get_token_balance(owner_id)
         if balance < entry_fee:
             return False, f"❌ موجودی کافی نیست. موجودی: {balance}"
-        existing = cached_query(f"lot_part_{lottery_id}_{user_tg_id}",
+        
+        # بررسی تکراری
+        existing = cached_query(
+            f"lot_part_{lottery_id}_{user_tg_id}",
             "SELECT 1 FROM amel_lottery_participants WHERE lottery_id = %s AND user_tg_id = %s",
-            (lottery_id, user_tg_id), fetch_one=True, ttl=5)
+            (lottery_id, user_tg_id), fetch_one=True, ttl=5
+        )
         if existing:
-            return False, "❌ قبلاً شرکت کرده‌اید"
-        execute_query("INSERT INTO amel_lottery_participants (lottery_id, user_tg_id, owner_id, bet_amount) VALUES (%s,%s,%s,%s)",
-            (lottery_id, user_tg_id, owner_id, entry_fee))
+            return False, "❌ قبلاً در این قرعه‌کشی شرکت کرده‌اید"
+        
+        # ثبت شرکت
+        execute_query(
+            """INSERT INTO amel_lottery_participants (lottery_id, user_tg_id, owner_id, bet_amount, created_at)
+            VALUES (%s, %s, %s, %s, %s)""",
+            (lottery_id, user_tg_id, owner_id, entry_fee, datetime.datetime.now().isoformat())
+        )
+        
+        # کسر الماس
         deduct_tokens(owner_id, entry_fee)
-        return True, f"✅ با {entry_fee} الماس شرکت کردید"
+        
+        invalidate_cache(f"lot_part_{lottery_id}_{user_tg_id}")
+        invalidate_cache(f"lot_parts_{lottery_id}")
+        
+        return True, f"✅ با {entry_fee} الماس در قرعه‌کشی شرکت کردید!"
     except Exception as e:
-        return False, f"❌ خطا: {e}"
+        print(f"❌ join_lottery error: {e}")
+        return False, f"❌ خطا: {str(e)}"
 
 def get_lottery_participants(lottery_id):
+    """دریافت لیست شرکت‌کنندگان قرعه‌کشی"""
     try:
-        return cached_query(f"lot_parts_{lottery_id}",
+        return cached_query(
+            f"lot_parts_{lottery_id}",
             "SELECT * FROM amel_lottery_participants WHERE lottery_id = %s",
-            (lottery_id,), fetch_all=True, ttl=10) or []
-    except: return []
+            (lottery_id,), fetch_all=True, ttl=10
+        ) or []
+    except:
+        return []
 
 def finish_lottery(lottery_id, winner_tg_id, winner_owner_id):
+    """پایان قرعه‌کشی"""
     try:
         if winner_owner_id:
+            # محاسبه مجموع جایزه
             participants = get_lottery_participants(lottery_id)
-            total = sum(p["bet_amount"] for p in participants)
-            execute_query("UPDATE amel_tokens SET balance = balance + %s WHERE owner_id = %s", (total, winner_owner_id))
-        execute_query("UPDATE amel_lotteries SET winner_tg_id = %s, status = 'finished' WHERE id = %s",
-            (winner_tg_id, lottery_id))
+            total_prize = sum(p["bet_amount"] for p in participants)
+            # واریز جایزه به برنده
+            add_tokens(winner_owner_id, total_prize)
+        
+        execute_query(
+            "UPDATE amel_lotteries SET winner_tg_id = %s, status = 'finished' WHERE id = %s",
+            (winner_tg_id, lottery_id)
+        )
+        invalidate_cache(f"lottery_{lottery_id}")
+        invalidate_cache(f"lottery_active_")
         return True
-    except: return False
+    except Exception as e:
+        print(f"❌ finish_lottery error: {e}")
+        return False
+
+def get_expired_lotteries():
+    """دریافت قرعه‌کشی‌های منقضی شده"""
+    try:
+        now = datetime.datetime.now().isoformat()
+        return cached_query(
+            "expired_lotteries",
+            "SELECT * FROM amel_lotteries WHERE status = 'active' AND end_time <= %s",
+            (now,), fetch_all=True, ttl=60
+        ) or []
+    except:
+        return []
+
+def cancel_lottery(lottery_id):
+    """لغو قرعه‌کشی و برگشت الماس به سازنده"""
+    try:
+        lottery = get_lottery(lottery_id)
+        if not lottery:
+            return False
+        
+        # برگشت الماس به سازنده
+        creator_account = get_account_by_tg_id(lottery['creator_tg_id'])
+        if creator_account:
+            add_tokens(creator_account['id'], lottery['prize_amount'])
+        
+        # برگشت الماس به شرکت‌کنندگان
+        participants = get_lottery_participants(lottery_id)
+        for p in participants:
+            owner = get_account(p['owner_id'])
+            if owner:
+                add_tokens(owner['id'], p['bet_amount'])
+        
+        execute_query(
+            "UPDATE amel_lotteries SET status = 'cancelled' WHERE id = %s",
+            (lottery_id,)
+        )
+        invalidate_cache(f"lottery_{lottery_id}")
+        invalidate_cache("lottery_active_")
+        return True
+    except Exception as e:
+        print(f"❌ cancel_lottery error: {e}")
+        return False
 
 try:
     init_tables()
