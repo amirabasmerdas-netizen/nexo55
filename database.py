@@ -43,20 +43,13 @@ from database_supabase import (
     get_math_challenge as supa_get_math_challenge,
     solve_math_challenge as supa_solve_math_challenge,
     create_worldcup_bet as supa_create_worldcup_bet,
-    create_world_cup_challenge as supa_create_world_cup_challenge,
     update_challenge_message as supa_update_challenge_message,
     get_active_worldcup_bet as supa_get_active_worldcup_bet,
     get_all_active_worldcup_bets as supa_get_all_active_worldcup_bets,
-    get_active_challenges as supa_get_active_challenges,
-    get_challenge as supa_get_challenge,
     get_worldcup_bet_by_message as supa_get_worldcup_bet_by_message,
     place_bet as supa_place_bet,
-    place_bet_v2 as supa_place_bet_v2,
     get_bet_users as supa_get_bet_users,
-    get_challenge_bets as supa_get_challenge_bets,
     finish_worldcup_bet as supa_finish_worldcup_bet,
-    set_challenge_winner as supa_set_challenge_winner,
-    settle_challenge_bets as supa_settle_challenge_bets,
     get_challenge_settings as supa_get_challenge_settings,
     update_challenge_settings as supa_update_challenge_settings,
     # شرط‌بندی دو نفره
@@ -70,25 +63,70 @@ from database_supabase import (
     get_bet_game as supa_get_bet_game,
     get_expired_bet_games as supa_get_expired_bet_games,
     transfer_tokens as supa_transfer_tokens,
-    transfer_diamonds as supa_transfer_diamonds,
-    # 🆕 قرعه‌کشی
-    create_lottery as supa_create_lottery,
-    update_lottery_message as supa_update_lottery_message,
-    get_lottery as supa_get_lottery,
-    join_lottery as supa_join_lottery,
-    get_lottery_participants as supa_get_lottery_participants,
-    finish_lottery as supa_finish_lottery,
-    # 🆕 چنل‌های اجباری
-    get_forced_channels as supa_get_forced_channels,
-    add_forced_channel as supa_add_forced_channel,
-    remove_forced_channel as supa_remove_forced_channel,
-    check_user_membership as supa_check_user_membership,
+    # 🆕 توابع جدید برای قرعه‌کشی و چنل اجباری
     SETTING_DEFAULTS,
     _hash_pw,
 )
 
+# 🆕 import توابع جدید از database_supabase
+try:
+    from database_supabase import (
+        create_lottery as supa_create_lottery,
+        update_lottery_message as supa_update_lottery_message,
+        get_lottery as supa_get_lottery,
+        join_lottery as supa_join_lottery,
+        get_lottery_participants as supa_get_lottery_participants,
+        finish_lottery as supa_finish_lottery,
+        get_active_challenges as supa_get_active_challenges,
+        get_challenge as supa_get_challenge,
+        get_challenge_bets as supa_get_challenge_bets,
+        set_challenge_winner as supa_set_challenge_winner,
+        settle_challenge_bets as supa_settle_challenge_bets,
+        create_world_cup_challenge as supa_create_world_cup_challenge,
+        place_bet_v2 as supa_place_bet_v2,
+        transfer_diamonds as supa_transfer_diamonds,
+    )
+except ImportError:
+    # اگر توابع جدید وجود نداشتند، None قرار بده
+    supa_create_lottery = None
+    supa_update_lottery_message = None
+    supa_get_lottery = None
+    supa_join_lottery = None
+    supa_get_lottery_participants = None
+    supa_finish_lottery = None
+    supa_get_active_challenges = None
+    supa_get_challenge = None
+    supa_get_challenge_bets = None
+    supa_set_challenge_winner = None
+    supa_settle_challenge_bets = None
+    supa_create_world_cup_challenge = None
+    supa_place_bet_v2 = None
+    supa_transfer_diamonds = None
+
 # ─── ایمپورت از دیتابیس کش (SQLite) ──────────────────────────────────────────
 import db_cache as cache
+
+# ─── ایمپورت مستقیم از database_supabase برای init_tables ────────────────────
+from database_supabase import init_tables as supa_init_tables
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 🆕 تابع init_tables - اصلاح خطای app.py
+# ══════════════════════════════════════════════════════════════════════════════
+def init_tables():
+    """ایجاد جداول در هر دو دیتابیس"""
+    try:
+        supa_init_tables()
+        print("✅ جداول Supabase ایجاد شدند")
+    except Exception as e:
+        print(f"❌ خطا در ایجاد جداول Supabase: {e}")
+    
+    try:
+        # db_cache خودش در get_conn جداول را ایجاد می‌کند
+        cache.get_conn()
+        print("✅ جداول SQLite ایجاد شدند")
+    except Exception as e:
+        print(f"❌ خطا در ایجاد جداول SQLite: {e}")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -288,9 +326,6 @@ def solve_math_challenge(challenge_id: int):
 def create_worldcup_bet(owner_id: int, team1: str, team2: str, match_time: str, photo_file_id: str = None):
     return supa_create_worldcup_bet(owner_id, team1, team2, match_time, photo_file_id)
 
-def create_world_cup_challenge(team1: str, team2: str, match_time: str, bet_amount: int):
-    return supa_create_world_cup_challenge(team1, team2, match_time, bet_amount)
-
 def update_challenge_message(challenge_id: int, message_id: int, chat_id: int):
     return supa_update_challenge_message(challenge_id, message_id, chat_id)
 
@@ -300,35 +335,17 @@ def get_active_worldcup_bet(owner_id: int):
 def get_all_active_worldcup_bets(owner_id: int):
     return supa_get_all_active_worldcup_bets(owner_id)
 
-def get_active_challenges():
-    return supa_get_active_challenges()
-
-def get_challenge(challenge_id: int):
-    return supa_get_challenge(challenge_id)
-
 def get_worldcup_bet_by_message(message_id: int, chat_id: int):
     return supa_get_worldcup_bet_by_message(message_id, chat_id)
 
 def place_bet(bet_id: int, user_tg_id: int, selected_team: str, bet_amount: int):
     return supa_place_bet(bet_id, user_tg_id, selected_team, bet_amount)
 
-def place_bet_v2(challenge_id: int, user_tg_id: int, owner_id: int, team_choice: str, bet_amount: int) -> tuple:
-    return supa_place_bet_v2(challenge_id, user_tg_id, owner_id, team_choice, bet_amount)
-
 def get_bet_users(bet_id: int):
     return supa_get_bet_users(bet_id)
 
-def get_challenge_bets(challenge_id: int):
-    return supa_get_challenge_bets(challenge_id)
-
 def finish_worldcup_bet(bet_id: int, winner: str):
     return supa_finish_worldcup_bet(bet_id, winner)
-
-def set_challenge_winner(challenge_id: int, winner_team: str):
-    return supa_set_challenge_winner(challenge_id, winner_team)
-
-def settle_challenge_bets(challenge_id: int):
-    return supa_settle_challenge_bets(challenge_id)
 
 def get_challenge_settings(owner_id: int):
     return supa_get_challenge_settings(owner_id)
@@ -370,36 +387,95 @@ def get_expired_bet_games():
 def transfer_tokens(from_owner_id: int, to_tg_id: int, amount: int) -> bool:
     return supa_transfer_tokens(from_owner_id, to_tg_id, amount)
 
-def transfer_diamonds(from_owner_id: int, to_owner_id: int, amount: int) -> tuple:
-    return supa_transfer_diamonds(from_owner_id, to_owner_id, amount)
-
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 🆕 توابع قرعه‌کشی
+# 🆕 توابع قرعه‌کشی (جدید)
 # ══════════════════════════════════════════════════════════════════════════════
 def create_lottery(chat_id: int, creator_tg_id: int, prize_amount: int, duration_minutes: int, entry_fee: int = 1):
-    return supa_create_lottery(chat_id, creator_tg_id, prize_amount, duration_minutes, entry_fee)
+    if supa_create_lottery:
+        return supa_create_lottery(chat_id, creator_tg_id, prize_amount, duration_minutes, entry_fee)
+    return None
 
 def update_lottery_message(lottery_id: int, message_id: int):
-    return supa_update_lottery_message(lottery_id, message_id)
+    if supa_update_lottery_message:
+        return supa_update_lottery_message(lottery_id, message_id)
+    return False
 
 def get_lottery(lottery_id: int):
-    return supa_get_lottery(lottery_id)
+    if supa_get_lottery:
+        return supa_get_lottery(lottery_id)
+    return None
 
 def join_lottery(lottery_id: int, user_tg_id: int, owner_id: int, entry_fee: int = None) -> tuple:
-    return supa_join_lottery(lottery_id, user_tg_id, owner_id, entry_fee)
+    if supa_join_lottery:
+        return supa_join_lottery(lottery_id, user_tg_id, owner_id, entry_fee)
+    return False, "❌ تابع قرعه‌کشی فعال نیست"
 
 def get_lottery_participants(lottery_id: int):
-    return supa_get_lottery_participants(lottery_id)
+    if supa_get_lottery_participants:
+        return supa_get_lottery_participants(lottery_id)
+    return []
 
 def finish_lottery(lottery_id: int, winner_tg_id: int, winner_owner_id: int):
-    return supa_finish_lottery(lottery_id, winner_tg_id, winner_owner_id)
+    if supa_finish_lottery:
+        return supa_finish_lottery(lottery_id, winner_tg_id, winner_owner_id)
+    return False
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 🆕 توابع چالش جام جهانی (جدید)
+# ══════════════════════════════════════════════════════════════════════════════
+def create_world_cup_challenge(team1: str, team2: str, match_time: str, bet_amount: int):
+    if supa_create_world_cup_challenge:
+        return supa_create_world_cup_challenge(team1, team2, match_time, bet_amount)
+    return None
+
+def get_active_challenges():
+    if supa_get_active_challenges:
+        return supa_get_active_challenges()
+    return []
+
+def get_challenge(challenge_id: int):
+    if supa_get_challenge:
+        return supa_get_challenge(challenge_id)
+    return None
+
+def get_challenge_bets(challenge_id: int):
+    if supa_get_challenge_bets:
+        return supa_get_challenge_bets(challenge_id)
+    return []
+
+def set_challenge_winner(challenge_id: int, winner_team: str):
+    if supa_set_challenge_winner:
+        return supa_set_challenge_winner(challenge_id, winner_team)
+    return False
+
+def settle_challenge_bets(challenge_id: int):
+    if supa_settle_challenge_bets:
+        return supa_settle_challenge_bets(challenge_id)
+    return False, "❌ تابع تسویه فعال نیست"
+
+def place_bet_v2(challenge_id: int, user_tg_id: int, owner_id: int, team_choice: str, bet_amount: int) -> tuple:
+    if supa_place_bet_v2:
+        return supa_place_bet_v2(challenge_id, user_tg_id, owner_id, team_choice, bet_amount)
+    return False, "❌ تابع شرط‌بندی فعال نیست"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 🆕 توابع انتقال الماس (جدید)
+# ══════════════════════════════════════════════════════════════════════════════
+def transfer_diamonds(from_owner_id: int, to_owner_id: int, amount: int) -> tuple:
+    if supa_transfer_diamonds:
+        return supa_transfer_diamonds(from_owner_id, to_owner_id, amount)
+    return False, "❌ تابع انتقال فعال نیست"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # صادرات
 # ══════════════════════════════════════════════════════════════════════════════
 __all__ = [
+    # 🆕 init_tables - برای app.py
+    'init_tables',
     # حساب‌ها
     'create_account', 'verify_account', 'get_account',
     'get_account_by_username', 'get_account_by_tg_id',
@@ -427,19 +503,23 @@ __all__ = [
     'get_forced_channels', 'add_forced_channel', 'remove_forced_channel', 'check_user_membership',
     # چالش‌ها
     'create_math_challenge', 'get_math_challenge', 'solve_math_challenge',
-    'create_worldcup_bet', 'create_world_cup_challenge', 'update_challenge_message',
+    'create_worldcup_bet', 'update_challenge_message',
     'get_active_worldcup_bet', 'get_all_active_worldcup_bets',
-    'get_active_challenges', 'get_challenge',
-    'get_worldcup_bet_by_message', 'place_bet', 'place_bet_v2',
-    'get_bet_users', 'get_challenge_bets',
-    'finish_worldcup_bet', 'set_challenge_winner', 'settle_challenge_bets',
+    'get_worldcup_bet_by_message', 'place_bet',
+    'get_bet_users', 'finish_worldcup_bet',
     'get_challenge_settings', 'update_challenge_settings',
     # شرط‌بندی دو نفره
     'create_bet_game', 'join_bet_game', 'get_active_bet_game',
     'get_all_active_bet_games', 'get_bet_game_by_message',
     'finish_bet_game', 'expire_bet_game', 'get_bet_game',
-    'get_expired_bet_games', 'transfer_tokens', 'transfer_diamonds',
-    # قرعه‌کشی
+    'get_expired_bet_games', 'transfer_tokens',
+    # 🆕 قرعه‌کشی
     'create_lottery', 'update_lottery_message', 'get_lottery',
     'join_lottery', 'get_lottery_participants', 'finish_lottery',
+    # 🆕 چالش جام جهانی جدید
+    'create_world_cup_challenge', 'get_active_challenges', 'get_challenge',
+    'get_challenge_bets', 'set_challenge_winner', 'settle_challenge_bets',
+    'place_bet_v2',
+    # 🆕 انتقال الماس
+    'transfer_diamonds',
 ]
