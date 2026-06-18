@@ -194,7 +194,7 @@ def start_token_bot():
             reply_markup=markup
         )
 
-    # ─── ساخت کیبوردها (مرتب‌شده) ──────────────────────────────────────────
+    # ─── ساخت کیبوردها ──────────────────────────────────────────────────────
     def user_keyboard():
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
         markup.add("💰 موجودی", "🎁 هدیه روزانه")
@@ -1708,7 +1708,6 @@ def start_token_bot():
             
             selected_team = parts[3]
             
-            # دریافت چالش از دیتابیس با message_id و chat_id
             bet = db.get_worldcup_bet_by_message(call.message.message_id, call.message.chat.id)
             if not bet:
                 bet = db.get_bet_game(bet_id)
