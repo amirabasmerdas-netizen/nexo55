@@ -556,8 +556,9 @@ def _register_handlers(bot):
                 for ch in channels:
                     markup.add(types.InlineKeyboardButton(f"❌ حذف {ch}", callback_data=f"rmch_{ch}"))
             markup.add(types.InlineKeyboardButton("➕ افزودن", callback_data="addch"))
+            ch_list = ''.join('• ' + c + '\n' for c in channels) if channels else 'هیچ کانالی ثبت نشده'
             bot.reply_to(message,
-                f"🔌 <b>کانال‌های اجباری</b>\n\n{''.join(f'• {c}\n' for c in channels) if channels else 'هیچ کانالی ثبت نشده'}",
+                f"🔌 <b>کانال‌های اجباری</b>\n\n{ch_list}",
                 reply_markup=markup, parse_mode="HTML")
         except Exception as e:
             bot.reply_to(message, f"❌ خطا: {e}")
