@@ -6,13 +6,18 @@ import datetime
 import random
 import threading
 import time
+import logging
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 from telethon.tl.functions.account import UpdateProfileRequest
-from telethon.errors import FloodWaitError
+from telethon.errors import FloodWaitError, RPCError
 import database as db
 import config
 from texts import ENEMY_REPLIES, FRIEND_REPLIES  
+
+# ─── تنظیم لاگ ──────────────────────────────────────────────────────────────────
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # ─── فونت‌ها ───────────────────────────────────────────────────────────────────
 FONTS = {
@@ -38,10 +43,10 @@ _last_friend_reply = {}     # {sender_id: timestamp}
 SECRETARY_COOLDOWN = 86400  # 24 ساعت
 FRIEND_COOLDOWN = 3600      # 1 ساعت
 
-# ─── کش حافظه ──────────────────────────────────────────────────────────────────
+# ─── کش کاربران ──────────────────────────────────────────────────────────────
 _user_cache = {}
 _user_cache_time = {}
-_CACHE_TTL = 60  # 60 ثانیه
+_CACHE_TTL = 60
 
 def get_cached_user(tg_id: int):
     now = time.time()
@@ -52,10 +57,6 @@ def get_cached_user(tg_id: int):
     _user_cache_time[tg_id] = now
     return account
 
-def clear_user_cache():
-    _user_cache.clear()
-    _user_cache_time.clear()
-
 def _convert_font(text, chars):
     result = []
     for ch in text:
@@ -65,18 +66,15 @@ def _convert_font(text, chars):
             result.append(ch)
     return "".join(result)
 
-
 def _apply_font(owner_id, text):
     font_id = db.get_setting(owner_id, "selected_font", "0")
     fn = FONTS.get(font_id, FONTS["0"])
     return fn(text)
 
-
 def persian_time():
     iran_tz = datetime.timezone(datetime.timedelta(hours=3, minutes=30))
     now = datetime.datetime.now(iran_tz)
     return f"{now.hour:02d}:{now.minute:02d}"
-
 
 # ─── BotManager: مدیریت چندین کلاینت همزمان ────────────────────────────────────
 class BotManager:
@@ -130,13 +128,18 @@ class BotManager:
         if config.BOT_TOKEN and not is_owner:
             self._cancel_timer(owner_id)
             timer = threading.Timer(
-                config.SESSION_HOURS * 3600, self.stop, args=[owner_id]
+                config.SESSION_HOURS * 3600, self._session_expired, args=[owner_id]
             )
             timer.daemon = True
             timer.start()
             self._timers[owner_id] = timer
 
         return True
+
+    def _session_expired(self, owner_id: int):
+        logger.info(f"⏰ [{owner_id}] جلسه سلف‌بات به پایان رسید!")
+        self.stop(owner_id)
+        db.set_setting(owner_id, "self_bot_active", "0")
 
     def stop(self, owner_id: int):
         self._cancel_timer(owner_id)
@@ -158,6 +161,7 @@ class BotManager:
     async def _run_bot(self, owner_id: int):
         entry = self._bots[owner_id]
         retry_delay = 5
+        consecutive_failures = 0
 
         while not entry["stop"]:
             try:
@@ -166,6 +170,7 @@ class BotManager:
                     await asyncio.sleep(10)
                     continue
 
+                # ✅ تنظیمات بهینه برای اتصال پایدار
                 cl = TelegramClient(
                     StringSession(session_data),
                     config.API_ID,
@@ -173,6 +178,13 @@ class BotManager:
                     connection_retries=5,
                     retry_delay=3,
                     timeout=30,
+                    receive_timeout=20,
+                    send_timeout=20,
+                    auto_reconnect=True,
+                    flood_sleep_threshold=60,
+                    device_model="AMEL SELF55",
+                    system_version="1.0.0",
+                    app_version="1.2.0"
                 )
                 entry["client"] = cl
                 _register_handlers(cl, owner_id, entry)
@@ -180,28 +192,49 @@ class BotManager:
                 try:
                     await cl.connect()
                     if not cl.is_connected():
-                        print(f"⚠️ [{owner_id}] اتصال برقرار نشد، تلاش مجدد...")
+                        logger.warning(f"⚠️ [{owner_id}] اتصال برقرار نشد، تلاش مجدد...")
                         await asyncio.sleep(5)
                         continue
                     
                     await cl.start(phone=lambda: None, bot_token=lambda: None)
                     
                 except Exception as e:
-                    print(f"❌ [{owner_id}] خطا در اتصال: {e}")
-                    if "invalid" in str(e).lower() or "auth" in str(e).lower():
+                    error_msg = str(e).lower()
+                    logger.error(f"❌ [{owner_id}] خطا در اتصال: {e}")
+                    
+                    if "invalid" in error_msg or "auth" in error_msg or "not found" in error_msg:
                         db.set_setting(owner_id, "session_data", "")
                         db.set_setting(owner_id, "logged_in", "0")
-                        print(f"🔄 [{owner_id}] Session خراب است، پاک شد.")
+                        logger.info(f"🔄 [{owner_id}] Session خراب است، پاک شد.")
+                        entry["stop"] = True
+                        break
+                    
+                    if "connection" in error_msg or "timeout" in error_msg:
+                        consecutive_failures += 1
+                        if consecutive_failures > 5:
+                            logger.error(f"🛑 [{owner_id}] بیش از 5 بار خطای اتصال، متوقف شد.")
+                            entry["stop"] = True
+                            break
+                        await asyncio.sleep(min(consecutive_failures * 15, 60))
+                        continue
+                        
                     await asyncio.sleep(10)
                     continue
                     
-                me = await cl.get_me()
-                if not me:
-                    print(f"❌ [{owner_id}] نمی‌توان اطلاعات کاربر را دریافت کرد")
+                consecutive_failures = 0
+                
+                try:
+                    me = await cl.get_me()
+                    if not me:
+                        logger.error(f"❌ [{owner_id}] نمی‌توان اطلاعات کاربر را دریافت کرد")
+                        await asyncio.sleep(5)
+                        continue
+                except Exception as e:
+                    logger.error(f"❌ [{owner_id}] خطا در دریافت اطلاعات کاربر: {e}")
                     await asyncio.sleep(5)
                     continue
                     
-                print(f"✅ [{owner_id}] بات راه‌اندازی شد — {me.first_name} (@{me.username})")
+                logger.info(f"✅ [{owner_id}] بات راه‌اندازی شد — {me.first_name} (@{me.username})")
 
                 db.save_telegram_user_id(owner_id, me.id)
 
@@ -220,42 +253,59 @@ class BotManager:
                     if not entry.get("owner_refunded") and entry.get("tokens_deducted", 0) > 0:
                         db.add_tokens(owner_id, entry["tokens_deducted"])
                         entry["owner_refunded"] = True
-                        print(f"👑 [{owner_id}] مالک تشخیص داده شد - {entry['tokens_deducted']} الماس برگشت داده شد")
-                    print(f"👑 [{owner_id}] مالک: @{me.username} (ID: {me.id}) — تایمر لغو — رایگان ♾️")
+                        logger.info(f"👑 [{owner_id}] مالک تشخیص داده شد - {entry['tokens_deducted']} الماس برگشت داده شد")
+                    logger.info(f"👑 [{owner_id}] مالک: @{me.username} (ID: {me.id}) — تایمر لغو — رایگان ♾️")
 
+                # استارت تسک‌های پس‌زمینه
                 clock_task = asyncio.ensure_future(_clock_loop(cl, owner_id))
                 sched_task = asyncio.ensure_future(_scheduler_loop(cl, owner_id))
+                keep_alive_task = asyncio.ensure_future(_keep_alive_loop(cl, owner_id))
                 
                 math_task = None
                 if owner_id == 1 or is_now_owner:
                     math_task = asyncio.ensure_future(_math_challenge_loop(cl, owner_id))
-                    print(f"🧮 [{owner_id}] چالش ریاضی فعال شد")
+                    logger.info(f"🧮 [{owner_id}] چالش ریاضی فعال شد")
 
                 retry_delay = 5
-                await cl.run_until_disconnected()
+                
+                try:
+                    await cl.run_until_disconnected()
+                except Exception as e:
+                    logger.error(f"❌ [{owner_id}] خطا در run_until_disconnected: {e}")
 
                 clock_task.cancel()
                 sched_task.cancel()
+                keep_alive_task.cancel()
                 if math_task:
                     math_task.cancel()
 
                 if entry["stop"]:
                     break
-                print(f"⚠️  [{owner_id}] اتصال قطع شد، اتصال مجدد...")
+                logger.warning(f"⚠️  [{owner_id}] اتصال قطع شد، اتصال مجدد...")
 
             except Exception as e:
-                print(f"❌ [{owner_id}] خطا: {e}")
+                logger.error(f"❌ [{owner_id}] خطا: {e}")
                 if entry["stop"]:
                     break
 
             await asyncio.sleep(retry_delay)
-            retry_delay = min(retry_delay * 2, 120)
+            retry_delay = min(retry_delay * 2, 60)
 
-        print(f"🛑 [{owner_id}] بات متوقف شد.")
-
+        logger.info(f"🛑 [{owner_id}] بات متوقف شد.")
 
 bot_manager = BotManager()
 
+# ─── حلقه Keep-Alive ──────────────────────────────────────────────────────────
+async def _keep_alive_loop(cl, owner_id):
+    """حلقه نگهداری اتصال با ارسال پینگ هر 30 ثانیه"""
+    while True:
+        try:
+            if cl and cl.is_connected():
+                await cl.get_me()
+            await asyncio.sleep(30)
+        except Exception as e:
+            logger.warning(f"⚠️ [{owner_id}] خطا در keep_alive: {e}")
+            await asyncio.sleep(10)
 
 # ─── ثبت هندلرها (per-user) ────────────────────────────────────────────────────
 def _register_handlers(cl: TelegramClient, owner_id: int, entry: dict):
@@ -323,7 +373,7 @@ def _register_handlers(cl: TelegramClient, owner_id: int, entry: dict):
                         add_to_recent=True
                     ))
                 except Exception as e:
-                    print(f"⚠️ خطا در ری‌اکشن گروه: {e}")
+                    logger.warning(f"⚠️ خطا در ری‌اکشن گروه: {e}")
             
             return
 
@@ -389,7 +439,7 @@ def _register_handlers(cl: TelegramClient, owner_id: int, entry: dict):
                     add_to_recent=True
                 ))
             except Exception as e:
-                print(f"⚠️ خطا در ری‌اکشن: {e}")
+                logger.warning(f"⚠️ خطا در ری‌اکشن: {e}")
 
         # پاسخ خودکار محبت‌آمیز به دوستان (فقط در پیوی - با محدودیت 1 ساعت)
         if event.is_private and db.is_friend(owner_id, sender_id):
@@ -424,7 +474,7 @@ def _register_handlers(cl: TelegramClient, owner_id: int, entry: dict):
             except Exception:
                 pass
 
-        # ✅ پاسخ به چالش ریاضی (در گروه @Gp_SelfNexo)
+        # پاسخ به چالش ریاضی (در گروه @Gp_SelfNexo)
         if chat_id == -1002107981593 and event.is_reply:
             replied = await event.get_reply_message()
             if replied:
@@ -490,7 +540,6 @@ def _register_handlers(cl: TelegramClient, owner_id: int, entry: dict):
             return
 
         await _handle_command(cl, event, text, owner_id, entry)
-
 
 # ─── پردازش دستورات ────────────────────────────────────────────────────────────
 async def _handle_command(cl, event, text, owner_id, entry):
@@ -823,17 +872,21 @@ async def _handle_command(cl, event, text, owner_id, entry):
         else:
             await edit("❗ فرمت: ارسال زمان‌بندی [YYYY-MM-DD HH:MM] متن")
 
-
 # ─── توابع کمکی ────────────────────────────────────────────────────────────────
 async def _safe_edit(event, owner_id, text):
     try:
         fn = FONTS.get(db.get_setting(owner_id, "selected_font", "0"), FONTS["0"])
         await event.edit(fn(text))
     except FloodWaitError as e:
-        await asyncio.sleep(e.seconds + 1)
+        wait = min(e.seconds + 1, 60)
+        logger.warning(f"⏳ FloodWait: {wait} ثانیه صبر...")
+        await asyncio.sleep(wait)
+        try:
+            await event.edit(fn(text))
+        except Exception:
+            pass
     except Exception:
         pass
-
 
 async def _resolve_target(event, parts):
     replied = await event.get_reply_message()
@@ -850,7 +903,6 @@ async def _resolve_target(event, parts):
             return {"id": int(p), "username": None, "name": p}
     return None
 
-
 async def _do_spam(cl, owner_id, chat_id, text, count):
     delay = float(db.get_setting(owner_id, "spam_delay", "2"))
     for _ in range(count):
@@ -860,11 +912,10 @@ async def _do_spam(cl, owner_id, chat_id, text, count):
             await cl.send_message(chat_id, text)
             await asyncio.sleep(delay)
         except FloodWaitError as e:
-            await asyncio.sleep(e.seconds + 1)
+            await asyncio.sleep(min(e.seconds + 1, 60))
         except Exception:
             break
     db.set_setting(owner_id, "spam_active", "0")
-
 
 async def _save_channel_media(cl, channel_input, limit, owner_id):
     db.set_setting(owner_id, "channel_save_active", "1")
@@ -890,9 +941,9 @@ async def _save_channel_media(cl, channel_input, limit, owner_id):
                             caption += f"\n📝 {msg.text[:100]}"
                         await cl.send_file(me.id, path, caption=caption)
                         saved += 1
-                        await asyncio.sleep(0.1)  # کاهش تاخیر
+                        await asyncio.sleep(0.1)
                 except FloodWaitError as e:
-                    await asyncio.sleep(e.seconds + 2)
+                    await asyncio.sleep(min(e.seconds + 2, 60))
                 except Exception:
                     skipped += 1
             else:
@@ -909,7 +960,6 @@ async def _save_channel_media(cl, channel_input, limit, owner_id):
         except Exception:
             pass
 
-
 async def _translate(text):
     try:
         import urllib.request, urllib.parse, json
@@ -919,7 +969,6 @@ async def _translate(text):
             return data[0][0][0]
     except Exception:
         return "⚠️ خطا در ترجمه"
-
 
 async def _get_weather(city):
     try:
@@ -937,7 +986,6 @@ async def _get_weather(city):
     except Exception:
         return "⚠️ خطا در دریافت اطلاعات هوا"
 
-
 async def _get_currency():
     try:
         import urllib.request, json
@@ -950,7 +998,6 @@ async def _get_currency():
                     f"دلار/روبل: {round(r['RUB'],2)}")
     except Exception:
         return "⚠️ خطا در دریافت قیمت ارز"
-
 
 def _help_text():
     return """📖 راهنمای AMEL SELF55
@@ -1012,7 +1059,6 @@ def _help_text():
 💡 نکته: پاسخ به دوستان هر 1 ساعت یک بار!
 """
 
-
 # ─── حلقه‌های پس‌زمینه ──────────────────────────────────────────────────────────
 async def _clock_loop(cl, owner_id):
     """به‌روزرسانی ساعت نام/بیو با دقت بالا"""
@@ -1035,23 +1081,22 @@ async def _clock_loop(cl, owner_id):
                 if db.get_setting(owner_id, "clock_name_active") == "1":
                     try:
                         await cl(UpdateProfileRequest(last_name=styled_time[:64]))
-                        print(f"⏰ [{owner_id}] ساعت نام به‌روز شد: {styled_time}")
+                        logger.info(f"⏰ [{owner_id}] ساعت نام به‌روز شد: {styled_time}")
                     except Exception as e:
-                        print(f"❌ خطا در به‌روزرسانی نام: {e}")
+                        logger.warning(f"❌ خطا در به‌روزرسانی نام: {e}")
                 
                 if db.get_setting(owner_id, "clock_bio_active") == "1":
                     try:
                         await cl(UpdateProfileRequest(about=f"⏰ {styled_time}"[:70]))
-                        print(f"⏰ [{owner_id}] ساعت بیو به‌روز شد: {styled_time}")
+                        logger.info(f"⏰ [{owner_id}] ساعت بیو به‌روز شد: {styled_time}")
                     except Exception as e:
-                        print(f"❌ خطا در به‌روزرسانی بیو: {e}")
+                        logger.warning(f"❌ خطا در به‌روزرسانی بیو: {e}")
             
             await asyncio.sleep(5)
             
         except Exception as e:
-            print(f"❌ خطا در _clock_loop: {e}")
+            logger.error(f"❌ خطا در _clock_loop: {e}")
             await asyncio.sleep(10)
-
 
 async def _scheduler_loop(cl, owner_id):
     while True:
@@ -1065,7 +1110,6 @@ async def _scheduler_loop(cl, owner_id):
         except Exception:
             pass
         await asyncio.sleep(30)
-
 
 # ─── حلقه چالش ریاضی ──────────────────────────────────────────────────────────
 async def _math_challenge_loop(cl, owner_id):
@@ -1120,5 +1164,5 @@ async def _math_challenge_loop(cl, owner_id):
                 db.solve_math_challenge(challenge['id'])
                 
         except Exception as e:
-            print(f"❌ خطا در math_challenge_loop: {e}")
+            logger.error(f"❌ خطا در math_challenge_loop: {e}")
             await asyncio.sleep(60)
