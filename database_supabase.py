@@ -23,11 +23,9 @@ _POOL_TIMEOUT = 3600    # ✅ از 300 (5 دقیقه) به 3600 (1 ساعت)
 
 
 def get_pool():
-    """دریافت connection pool با مدیریت خودکار"""
     global _pool, _pool_created
     with _pool_lock:
         now = time.time()
-        
         if _pool is None or (now - _pool_created > _POOL_TIMEOUT):
             if _pool:
                 try:
@@ -55,7 +53,6 @@ def get_pool():
 
 
 def get_conn():
-    """دریافت اتصال از pool - بدون SET statement_timeout"""
     pool = get_pool()
     try:
         conn = pool.getconn()
@@ -68,7 +65,6 @@ def get_conn():
 
 
 def return_conn(conn):
-    """برگرداندن اتصال به pool"""
     if conn:
         try:
             pool = get_pool()
@@ -295,9 +291,7 @@ def init_tables():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """,
-        # ═══════════════════════════════════════════════════════════════════
-        # 🆕 جداول جدید: قرعه‌کشی، چنل‌های اجباری، تراکنش‌ها
-        # ═══════════════════════════════════════════════════════════════════
+        # 🆕 جداول جدید
         "amel_forced_channels": """
             CREATE TABLE IF NOT EXISTS amel_forced_channels (
                 id SERIAL PRIMARY KEY,
@@ -934,31 +928,27 @@ def solve_math_challenge(challenge_id: int):
 # ══════════════════════════════════════════════════════════════════════════════
 # ⚽ چالش جام جهانی
 # ══════════════════════════════════════════════════════════════════════════════
-def create_world_cup_challenge(team1: str, team2: str, match_time: str, bet_amount: int):
-    """ایجاد چالش جام جهانی - برای telegram_bot (3).py"""
+def create_worldcup_bet(owner_id: int, team1: str, team2: str, match_time: str, photo_file_id: str = None):
     try:
-        # تبدیل match_time به timestamp
-        try:
-            if 'T' not in match_time:
-                today = datetime.date.today().isoformat()
-                match_time = f"{today} {match_time}:00"
-            match_dt = datetime.datetime.fromisoformat(match_time)
-        except:
-            match_dt = datetime.datetime.now() + datetime.timedelta(hours=1)
-        
         query = """
-            INSERT INTO amel_worldcup_bets (owner_id, team1, team2, match_time, created_at)
-            VALUES (1, %s, %s, %s, %s)
+            INSERT INTO amel_worldcup_bets (owner_id, team1, team2, match_time, photo_file_id, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s)
             RETURNING id
         """
-        result = execute_query(query, (team1, team2, match_dt, datetime.datetime.now().isoformat()), fetch_one=True)
+        result = execute_query(query, (owner_id, team1, team2, match_time, photo_file_id, datetime.datetime.now().isoformat()), fetch_one=True)
         if result:
-            invalidate_cache("wc_bets_")
+            invalidate_cache(f"wc_bets_{owner_id}")
             return result['id']
         return None
     except Exception as e:
-        print(f"❌ create_world_cup_challenge error: {e}")
+        print(f"❌ create_worldcup_bet error: {e}")
         return None
+
+
+# 🆕 تابع جدید برای telegram_bot (3).py
+def create_world_cup_challenge(team1: str, team2: str, match_time: str, bet_amount: int):
+    """ایجاد چالش جام جهانی - سازگار با telegram_bot (3).py"""
+    return create_worldcup_bet(1, team1, team2, match_time, None)
 
 
 def update_challenge_message(challenge_id: int, message_id: int, chat_id: int):
@@ -972,6 +962,35 @@ def update_challenge_message(challenge_id: int, message_id: int, chat_id: int):
         return False
 
 
+def get_active_worldcup_bet(owner_id: int):
+    try:
+        return cached_query(
+            f"wc_bet_active_{owner_id}",
+            "SELECT * FROM amel_worldcup_bets WHERE owner_id = %s AND is_finished = FALSE ORDER BY created_at DESC LIMIT 1",
+            (owner_id,),
+            fetch_one=True,
+            ttl=5
+        )
+    except Exception as e:
+        print(f"❌ get_active_worldcup_bet error: {e}")
+        return None
+
+
+def get_all_active_worldcup_bets(owner_id: int):
+    try:
+        return cached_query(
+            f"wc_bets_all_{owner_id}",
+            "SELECT * FROM amel_worldcup_bets WHERE owner_id = %s AND is_finished = FALSE ORDER BY created_at DESC",
+            (owner_id,),
+            fetch_all=True,
+            ttl=5
+        ) or []
+    except Exception as e:
+        print(f"❌ get_all_active_worldcup_bets error: {e}")
+        return []
+
+
+# 🆕 تابع جدید برای telegram_bot (3).py
 def get_active_challenges():
     """دریافت چالش‌های فعال - برای telegram_bot (3).py"""
     try:
@@ -984,7 +1003,6 @@ def get_active_challenges():
         if not result:
             return []
         
-        # تبدیل به فرمت مورد انتظار
         challenges = []
         for r in result:
             challenges.append({
@@ -992,7 +1010,7 @@ def get_active_challenges():
                 "team1": r['team1'],
                 "team2": r['team2'],
                 "match_time": r['match_time'].strftime("%H:%M") if isinstance(r['match_time'], datetime.datetime) else str(r['match_time']),
-                "bet_amount": 10,  # مقدار پیش‌فرض
+                "bet_amount": 10,
                 "status": "active",
                 "message_id": r.get('message_id'),
                 "chat_id": r.get('chat_id'),
@@ -1003,6 +1021,21 @@ def get_active_challenges():
         return []
 
 
+def get_worldcup_bet_by_message(message_id: int, chat_id: int):
+    try:
+        return cached_query(
+            f"wc_bet_msg_{message_id}_{chat_id}",
+            "SELECT * FROM amel_worldcup_bets WHERE message_id = %s AND chat_id = %s AND is_finished = FALSE",
+            (message_id, chat_id),
+            fetch_one=True,
+            ttl=5
+        )
+    except Exception as e:
+        print(f"❌ get_worldcup_bet_by_message error: {e}")
+        return None
+
+
+# 🆕 تابع جدید برای telegram_bot (3).py
 def get_challenge(challenge_id: int):
     """دریافت یک چالش - برای telegram_bot (3).py"""
     try:
@@ -1032,17 +1065,32 @@ def get_challenge(challenge_id: int):
         return None
 
 
-def place_bet(challenge_id: int, user_tg_id: int, owner_id: int, team_choice: str, bet_amount: int) -> tuple:
+def place_bet(bet_id: int, user_tg_id: int, selected_team: str, bet_amount: int):
+    try:
+        query = """
+            INSERT INTO amel_user_bets (bet_id, user_tg_id, selected_team, bet_amount, created_at)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (bet_id, user_tg_id) DO UPDATE
+            SET selected_team = EXCLUDED.selected_team, bet_amount = EXCLUDED.bet_amount
+        """
+        execute_query(query, (bet_id, user_tg_id, selected_team, bet_amount, datetime.datetime.now().isoformat()))
+        invalidate_cache(f"user_bets_{bet_id}")
+        return True
+    except Exception as e:
+        print(f"❌ place_bet error: {e}")
+        return False
+
+
+# 🆕 نسخه سازگار با telegram_bot (3).py
+def place_bet_v2(challenge_id: int, user_tg_id: int, owner_id: int, team_choice: str, bet_amount: int) -> tuple:
     """ثبت شرط - برای telegram_bot (3).py"""
     try:
         _init_tokens(owner_id)
         
-        # بررسی موجودی
         balance = get_token_balance(owner_id)
         if balance < bet_amount:
             return False, f"❌ موجودی کافی ندارید. موجودی: {balance} الماس"
         
-        # بررسی شرکت قبلی
         existing = cached_query(
             f"user_bet_{challenge_id}_{user_tg_id}",
             "SELECT 1 FROM amel_user_bets WHERE bet_id = %s AND user_tg_id = %s",
@@ -1053,64 +1101,68 @@ def place_bet(challenge_id: int, user_tg_id: int, owner_id: int, team_choice: st
         if existing:
             return False, "❌ شما قبلاً در این چالش شرکت کرده‌اید."
         
-        # ثبت شرط
         query = """
             INSERT INTO amel_user_bets (bet_id, user_tg_id, selected_team, bet_amount, created_at)
             VALUES (%s, %s, %s, %s, %s)
         """
         execute_query(query, (challenge_id, user_tg_id, team_choice, bet_amount, datetime.datetime.now().isoformat()))
         
-        # کسر الماس
         deduct_tokens(owner_id, bet_amount)
         
         invalidate_cache(f"user_bets_{challenge_id}")
         return True, f"✅ شرط {bet_amount} الماس روی {team_choice} ثبت شد."
     except Exception as e:
-        print(f"❌ place_bet error: {e}")
+        print(f"❌ place_bet_v2 error: {e}")
         return False, f"❌ خطا: {str(e)}"
 
 
-def get_challenge_bets(challenge_id: int):
-    """دریافت شرط‌های یک چالش"""
+def get_bet_users(bet_id: int):
     try:
-        result = cached_query(
-            f"user_bets_{challenge_id}",
+        return cached_query(
+            f"user_bets_{bet_id}",
             "SELECT * FROM amel_user_bets WHERE bet_id = %s",
-            (challenge_id,),
+            (bet_id,),
             fetch_all=True,
             ttl=10
-        )
-        if not result:
-            return []
-        
-        bets = []
-        for r in result:
-            bets.append({
-                "id": r['id'],
-                "challenge_id": r['bet_id'],
-                "user_tg_id": r['user_tg_id'],
-                "owner_id": r['user_tg_id'],  # برای سازگاری
-                "team_choice": r['selected_team'],
-                "bet_amount": r['bet_amount'],
-                "result": "pending",
-            })
-        return bets
+        ) or []
     except Exception as e:
-        print(f"❌ get_challenge_bets error: {e}")
+        print(f"❌ get_bet_users error: {e}")
         return []
 
 
-def set_challenge_winner(challenge_id: int, winner_team: str):
-    """تعیین برنده چالش"""
+# 🆕 برای telegram_bot (3).py
+def get_challenge_bets(challenge_id: int):
+    """دریافت شرط‌های یک چالش"""
+    bets = get_bet_users(challenge_id)
+    result = []
+    for b in bets:
+        result.append({
+            "id": b['id'],
+            "challenge_id": b['bet_id'],
+            "user_tg_id": b['user_tg_id'],
+            "owner_id": b['user_tg_id'],
+            "team_choice": b['selected_team'],
+            "bet_amount": b['bet_amount'],
+            "result": "pending",
+        })
+    return result
+
+
+def finish_worldcup_bet(bet_id: int, winner: str):
     try:
         query = "UPDATE amel_worldcup_bets SET winner = %s, is_finished = TRUE WHERE id = %s"
-        execute_query(query, (winner_team, challenge_id))
+        execute_query(query, (winner, bet_id))
         invalidate_cache("wc_bet_")
-        invalidate_cache(f"user_bets_{challenge_id}")
+        invalidate_cache(f"user_bets_{bet_id}")
         return True
     except Exception as e:
-        print(f"❌ set_challenge_winner error: {e}")
+        print(f"❌ finish_worldcup_bet error: {e}")
         return False
+
+
+# 🆕 برای telegram_bot (3).py
+def set_challenge_winner(challenge_id: int, winner_team: str):
+    return finish_worldcup_bet(challenge_id, winner_team)
 
 
 def settle_challenge_bets(challenge_id: int):
@@ -1145,322 +1197,6 @@ def settle_challenge_bets(challenge_id: int):
     except Exception as e:
         print(f"❌ settle_challenge_bets error: {e}")
         return False, str(e)
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# 🎲 قرعه‌کشی (جدید)
-# ══════════════════════════════════════════════════════════════════════════════
-def create_lottery(chat_id: int, creator_tg_id: int, prize_amount: int, duration_minutes: int, entry_fee: int = 1):
-    """ایجاد قرعه‌کشی - برای telegram_bot (3).py"""
-    try:
-        end_time = datetime.datetime.now() + datetime.timedelta(minutes=duration_minutes)
-        query = """
-            INSERT INTO amel_lotteries (chat_id, creator_tg_id, prize_amount, entry_fee, end_time, status)
-            VALUES (%s, %s, %s, %s, %s, 'active')
-            RETURNING id
-        """
-        result = execute_query(query, (chat_id, creator_tg_id, prize_amount, entry_fee, end_time), fetch_one=True)
-        if result:
-            invalidate_cache("lottery_")
-            return result['id']
-        return None
-    except Exception as e:
-        print(f"❌ create_lottery error: {e}")
-        return None
-
-
-def update_lottery_message(lottery_id: int, message_id: int):
-    """به‌روزرسانی message_id قرعه‌کشی"""
-    try:
-        query = "UPDATE amel_lotteries SET message_id = %s WHERE id = %s"
-        execute_query(query, (message_id, lottery_id))
-        invalidate_cache(f"lottery_{lottery_id}")
-        return True
-    except Exception as e:
-        print(f"❌ update_lottery_message error: {e}")
-        return False
-
-
-def get_lottery(lottery_id: int):
-    """دریافت اطلاعات قرعه‌کشی"""
-    try:
-        result = cached_query(
-            f"lottery_{lottery_id}",
-            "SELECT * FROM amel_lotteries WHERE id = %s",
-            (lottery_id,),
-            fetch_one=True,
-            ttl=10
-        )
-        if not result:
-            return None
-        
-        return {
-            "id": result['id'],
-            "chat_id": result['chat_id'],
-            "creator_tg_id": result['creator_tg_id'],
-            "prize_amount": result['prize_amount'],
-            "entry_fee": result['entry_fee'],
-            "end_time": result['end_time'],
-            "winner_tg_id": result.get('winner_tg_id'),
-            "status": result['status'],
-            "message_id": result.get('message_id'),
-        }
-    except Exception as e:
-        print(f"❌ get_lottery error: {e}")
-        return None
-
-
-def join_lottery(lottery_id: int, user_tg_id: int, owner_id: int, entry_fee: int = None) -> tuple:
-    """شرکت در قرعه‌کشی"""
-    try:
-        _init_tokens(owner_id)
-        
-        lottery = get_lottery(lottery_id)
-        if not lottery or lottery['status'] != 'active':
-            return False, "❌ قرعه‌کشی فعال نیست یا یافت نشد."
-        
-        if entry_fee is None:
-            entry_fee = lottery['entry_fee']
-        
-        # بررسی موجودی
-        balance = get_token_balance(owner_id)
-        if balance < entry_fee:
-            return False, f"❌ موجودی کافی ندارید. موجودی: {balance} الماس | هزینه: {entry_fee} الماس"
-        
-        # بررسی شرکت قبلی
-        existing = cached_query(
-            f"lottery_part_{lottery_id}_{user_tg_id}",
-            "SELECT 1 FROM amel_lottery_participants WHERE lottery_id = %s AND user_tg_id = %s",
-            (lottery_id, user_tg_id),
-            fetch_one=True,
-            ttl=5
-        )
-        if existing:
-            return False, "❌ شما قبلاً در این قرعه‌کشی شرکت کرده‌اید."
-        
-        # ثبت شرکت
-        query = """
-            INSERT INTO amel_lottery_participants (lottery_id, user_tg_id, owner_id, bet_amount)
-            VALUES (%s, %s, %s, %s)
-        """
-        execute_query(query, (lottery_id, user_tg_id, owner_id, entry_fee))
-        
-        # کسر الماس
-        deduct_tokens(owner_id, entry_fee)
-        
-        invalidate_cache(f"lottery_part_{lottery_id}_{user_tg_id}")
-        invalidate_cache(f"lottery_parts_{lottery_id}")
-        return True, f"✅ با {entry_fee} الماس در قرعه‌کشی شرکت کردید."
-    except Exception as e:
-        print(f"❌ join_lottery error: {e}")
-        return False, f"❌ خطا: {str(e)}"
-
-
-def get_lottery_participants(lottery_id: int):
-    """دریافت شرکت‌کنندگان قرعه‌کشی"""
-    try:
-        result = cached_query(
-            f"lottery_parts_{lottery_id}",
-            "SELECT * FROM amel_lottery_participants WHERE lottery_id = %s",
-            (lottery_id,),
-            fetch_all=True,
-            ttl=10
-        )
-        if not result:
-            return []
-        
-        participants = []
-        for r in result:
-            participants.append({
-                "id": r['id'],
-                "lottery_id": r['lottery_id'],
-                "user_tg_id": r['user_tg_id'],
-                "owner_id": r['owner_id'],
-                "bet_amount": r['bet_amount'],
-            })
-        return participants
-    except Exception as e:
-        print(f"❌ get_lottery_participants error: {e}")
-        return []
-
-
-def finish_lottery(lottery_id: int, winner_tg_id: int, winner_owner_id: int):
-    """پایان قرعه‌کشی"""
-    try:
-        query = "UPDATE amel_lotteries SET winner_tg_id = %s, status = 'finished' WHERE id = %s"
-        execute_query(query, (winner_tg_id, lottery_id))
-        invalidate_cache(f"lottery_{lottery_id}")
-        return True
-    except Exception as e:
-        print(f"❌ finish_lottery error: {e}")
-        return False
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# 📢 چنل‌های اجباری (جدید)
-# ══════════════════════════════════════════════════════════════════════════════
-def get_forced_channels():
-    """دریافت لیست چنل‌های اجباری"""
-    try:
-        result = cached_query(
-            "forced_channels",
-            "SELECT username FROM amel_forced_channels ORDER BY added_at DESC",
-            fetch_all=True,
-            ttl=60
-        )
-        return [r['username'] for r in result] if result else []
-    except Exception as e:
-        print(f"❌ get_forced_channels error: {e}")
-        return []
-
-
-def add_forced_channel(username: str) -> bool:
-    """افزودن چنل اجباری"""
-    try:
-        if not username.startswith("@"):
-            username = "@" + username
-        query = "INSERT INTO amel_forced_channels (username) VALUES (%s)"
-        execute_query(query, (username,))
-        invalidate_cache("forced_channels")
-        return True
-    except Exception as e:
-        print(f"❌ add_forced_channel error: {e}")
-        return False
-
-
-def remove_forced_channel(username: str) -> bool:
-    """حذف چنل اجباری"""
-    try:
-        if not username.startswith("@"):
-            username = "@" + username
-        query = "DELETE FROM amel_forced_channels WHERE username = %s"
-        result = execute_query(query, (username,))
-        if result > 0:
-            invalidate_cache("forced_channels")
-            return True
-        return False
-    except Exception as e:
-        print(f"❌ remove_forced_channel error: {e}")
-        return False
-
-
-def check_user_membership(bot, user_id: int) -> tuple:
-    """بررسی عضویت کاربر در چنل‌های اجباری"""
-    channels = get_forced_channels()
-    if not channels:
-        return True, []
-    
-    missing = []
-    for ch in channels:
-        try:
-            member = bot.get_chat_member(ch, user_id)
-            if member.status not in ['member', 'administrator', 'creator']:
-                missing.append(ch)
-        except Exception:
-            missing.append(ch)
-    
-    return len(missing) == 0, missing
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# 💎 انتقال الماس (جدید)
-# ══════════════════════════════════════════════════════════════════════════════
-def transfer_diamonds(from_owner_id: int, to_owner_id: int, amount: int) -> tuple:
-    """انتقال الماس بین کاربران - برای telegram_bot (3).py"""
-    if amount <= 0:
-        return False, "❌ مقدار باید بزرگ‌تر از صفر باشد."
-    
-    if from_owner_id == to_owner_id:
-        return False, "❌ نمی‌توانید به خودتان الماس انتقال دهید."
-    
-    try:
-        _init_tokens(from_owner_id)
-        _init_tokens(to_owner_id)
-        
-        balance = get_token_balance(from_owner_id)
-        if balance < amount:
-            return False, f"❌ موجودی کافی ندارید. موجودی: {balance} الماس"
-        
-        # کسر از فرستنده
-        deduct_tokens(from_owner_id, amount)
-        
-        # اضافه به گیرنده
-        add_tokens(to_owner_id, amount)
-        
-        # ثبت تراکنش
-        query = """
-            INSERT INTO amel_diamond_transactions (from_owner_id, to_owner_id, amount, type, description)
-            VALUES (%s, %s, %s, 'transfer', 'انتقال الماس')
-        """
-        execute_query(query, (from_owner_id, to_owner_id, amount))
-        
-        return True, f"✅ {amount} الماس با موفقیت انتقال یافت."
-    except Exception as e:
-        print(f"❌ transfer_diamonds error: {e}")
-        return False, f"❌ خطا در انتقال: {str(e)}"
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# 🎯 چالش‌های ریاضی (سازگار با کد قدیمی)
-# ══════════════════════════════════════════════════════════════════════════════
-def create_worldcup_bet(owner_id: int, team1: str, team2: str, match_time: str, photo_file_id: str = None):
-    return create_world_cup_challenge(team1, team2, match_time, 10)
-
-
-def get_active_worldcup_bet(owner_id: int):
-    try:
-        result = cached_query(
-            f"wc_bet_active_{owner_id}",
-            "SELECT * FROM amel_worldcup_bets WHERE owner_id = %s AND is_finished = FALSE ORDER BY created_at DESC LIMIT 1",
-            (owner_id,),
-            fetch_one=True,
-            ttl=5
-        )
-        return result
-    except Exception as e:
-        print(f"❌ get_active_worldcup_bet error: {e}")
-        return None
-
-
-def get_worldcup_bet_by_message(message_id: int, chat_id: int):
-    try:
-        return cached_query(
-            f"wc_bet_msg_{message_id}_{chat_id}",
-            "SELECT * FROM amel_worldcup_bets WHERE message_id = %s AND chat_id = %s AND is_finished = FALSE",
-            (message_id, chat_id),
-            fetch_one=True,
-            ttl=5
-        )
-    except Exception as e:
-        print(f"❌ get_worldcup_bet_by_message error: {e}")
-        return None
-
-
-def get_bet_users(bet_id: int):
-    try:
-        result = cached_query(
-            f"user_bets_{bet_id}",
-            "SELECT * FROM amel_user_bets WHERE bet_id = %s",
-            (bet_id,),
-            fetch_all=True,
-            ttl=10
-        )
-        return result or []
-    except Exception as e:
-        print(f"❌ get_bet_users error: {e}")
-        return []
-
-
-def finish_worldcup_bet(bet_id: int, winner: str):
-    try:
-        query = "UPDATE amel_worldcup_bets SET winner = %s, is_finished = TRUE WHERE id = %s"
-        execute_query(query, (winner, bet_id))
-        invalidate_cache("wc_bet_")
-        invalidate_cache(f"user_bets_{bet_id}")
-        return True
-    except Exception as e:
-        print(f"❌ finish_worldcup_bet error: {e}")
-        return False
 
 
 def get_challenge_settings(owner_id: int):
@@ -1534,6 +1270,25 @@ def join_bet_game(game_id: int, player2_id: int):
         return False
 
 
+def get_all_active_bet_games(chat_id: int):
+    try:
+        return cached_query(
+            f"bet_games_{chat_id}",
+            "SELECT * FROM amel_bet_games WHERE chat_id = %s AND status IN ('waiting', 'active') ORDER BY created_at DESC",
+            (chat_id,),
+            fetch_all=True,
+            ttl=5
+        ) or []
+    except Exception as e:
+        print(f"❌ get_all_active_bet_games error: {e}")
+        return []
+
+
+def get_active_bet_game(chat_id: int):
+    games = get_all_active_bet_games(chat_id)
+    return games[0] if games else None
+
+
 def get_bet_game_by_message(chat_id: int, message_id: int):
     try:
         return cached_query(
@@ -1599,6 +1354,220 @@ def get_expired_bet_games():
         return []
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# 🎲 قرعه‌کشی (جدید - برای telegram_bot (3).py)
+# ══════════════════════════════════════════════════════════════════════════════
+def create_lottery(chat_id: int, creator_tg_id: int, prize_amount: int, duration_minutes: int, entry_fee: int = 1):
+    """ایجاد قرعه‌کشی"""
+    try:
+        end_time = datetime.datetime.now() + datetime.timedelta(minutes=duration_minutes)
+        query = """
+            INSERT INTO amel_lotteries (chat_id, creator_tg_id, prize_amount, entry_fee, end_time, status)
+            VALUES (%s, %s, %s, %s, %s, 'active')
+            RETURNING id
+        """
+        result = execute_query(query, (chat_id, creator_tg_id, prize_amount, entry_fee, end_time), fetch_one=True)
+        if result:
+            invalidate_cache("lottery_")
+            return result['id']
+        return None
+    except Exception as e:
+        print(f"❌ create_lottery error: {e}")
+        return None
+
+
+def update_lottery_message(lottery_id: int, message_id: int):
+    """به‌روزرسانی message_id قرعه‌کشی"""
+    try:
+        query = "UPDATE amel_lotteries SET message_id = %s WHERE id = %s"
+        execute_query(query, (message_id, lottery_id))
+        invalidate_cache(f"lottery_{lottery_id}")
+        return True
+    except Exception as e:
+        print(f"❌ update_lottery_message error: {e}")
+        return False
+
+
+def get_lottery(lottery_id: int):
+    """دریافت اطلاعات قرعه‌کشی"""
+    try:
+        result = cached_query(
+            f"lottery_{lottery_id}",
+            "SELECT * FROM amel_lotteries WHERE id = %s",
+            (lottery_id,),
+            fetch_one=True,
+            ttl=10
+        )
+        if not result:
+            return None
+        
+        return {
+            "id": result['id'],
+            "chat_id": result['chat_id'],
+            "creator_tg_id": result['creator_tg_id'],
+            "prize_amount": result['prize_amount'],
+            "entry_fee": result['entry_fee'],
+            "end_time": result['end_time'],
+            "winner_tg_id": result.get('winner_tg_id'),
+            "status": result['status'],
+            "message_id": result.get('message_id'),
+        }
+    except Exception as e:
+        print(f"❌ get_lottery error: {e}")
+        return None
+
+
+def join_lottery(lottery_id: int, user_tg_id: int, owner_id: int, entry_fee: int = None) -> tuple:
+    """شرکت در قرعه‌کشی"""
+    try:
+        _init_tokens(owner_id)
+        
+        lottery = get_lottery(lottery_id)
+        if not lottery or lottery['status'] != 'active':
+            return False, "❌ قرعه‌کشی فعال نیست یا یافت نشد."
+        
+        if entry_fee is None:
+            entry_fee = lottery['entry_fee']
+        
+        balance = get_token_balance(owner_id)
+        if balance < entry_fee:
+            return False, f"❌ موجودی کافی ندارید. موجودی: {balance} الماس | هزینه: {entry_fee} الماس"
+        
+        existing = cached_query(
+            f"lottery_part_{lottery_id}_{user_tg_id}",
+            "SELECT 1 FROM amel_lottery_participants WHERE lottery_id = %s AND user_tg_id = %s",
+            (lottery_id, user_tg_id),
+            fetch_one=True,
+            ttl=5
+        )
+        if existing:
+            return False, "❌ شما قبلاً در این قرعه‌کشی شرکت کرده‌اید."
+        
+        query = """
+            INSERT INTO amel_lottery_participants (lottery_id, user_tg_id, owner_id, bet_amount)
+            VALUES (%s, %s, %s, %s)
+        """
+        execute_query(query, (lottery_id, user_tg_id, owner_id, entry_fee))
+        
+        deduct_tokens(owner_id, entry_fee)
+        
+        invalidate_cache(f"lottery_part_{lottery_id}_{user_tg_id}")
+        invalidate_cache(f"lottery_parts_{lottery_id}")
+        return True, f"✅ با {entry_fee} الماس در قرعه‌کشی شرکت کردید."
+    except Exception as e:
+        print(f"❌ join_lottery error: {e}")
+        return False, f"❌ خطا: {str(e)}"
+
+
+def get_lottery_participants(lottery_id: int):
+    """دریافت شرکت‌کنندگان قرعه‌کشی"""
+    try:
+        result = cached_query(
+            f"lottery_parts_{lottery_id}",
+            "SELECT * FROM amel_lottery_participants WHERE lottery_id = %s",
+            (lottery_id,),
+            fetch_all=True,
+            ttl=10
+        )
+        if not result:
+            return []
+        
+        participants = []
+        for r in result:
+            participants.append({
+                "id": r['id'],
+                "lottery_id": r['lottery_id'],
+                "user_tg_id": r['user_tg_id'],
+                "owner_id": r['owner_id'],
+                "bet_amount": r['bet_amount'],
+            })
+        return participants
+    except Exception as e:
+        print(f"❌ get_lottery_participants error: {e}")
+        return []
+
+
+def finish_lottery(lottery_id: int, winner_tg_id: int, winner_owner_id: int):
+    """پایان قرعه‌کشی"""
+    try:
+        query = "UPDATE amel_lotteries SET winner_tg_id = %s, status = 'finished' WHERE id = %s"
+        execute_query(query, (winner_tg_id, lottery_id))
+        invalidate_cache(f"lottery_{lottery_id}")
+        return True
+    except Exception as e:
+        print(f"❌ finish_lottery error: {e}")
+        return False
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 📢 چنل‌های اجباری
+# ══════════════════════════════════════════════════════════════════════════════
+def get_forced_channels():
+    """دریافت لیست چنل‌های اجباری"""
+    try:
+        result = cached_query(
+            "forced_channels",
+            "SELECT username FROM amel_forced_channels ORDER BY added_at DESC",
+            fetch_all=True,
+            ttl=60
+        )
+        return [r['username'] for r in result] if result else []
+    except Exception as e:
+        print(f"❌ get_forced_channels error: {e}")
+        return []
+
+
+def add_forced_channel(username: str) -> bool:
+    """افزودن چنل اجباری"""
+    try:
+        if not username.startswith("@"):
+            username = "@" + username
+        query = "INSERT INTO amel_forced_channels (username) VALUES (%s)"
+        execute_query(query, (username,))
+        invalidate_cache("forced_channels")
+        return True
+    except Exception as e:
+        print(f"❌ add_forced_channel error: {e}")
+        return False
+
+
+def remove_forced_channel(username: str) -> bool:
+    """حذف چنل اجباری"""
+    try:
+        if not username.startswith("@"):
+            username = "@" + username
+        query = "DELETE FROM amel_forced_channels WHERE username = %s"
+        result = execute_query(query, (username,))
+        if result and result > 0:
+            invalidate_cache("forced_channels")
+            return True
+        return False
+    except Exception as e:
+        print(f"❌ remove_forced_channel error: {e}")
+        return False
+
+
+def check_user_membership(bot, user_id: int) -> tuple:
+    """بررسی عضویت کاربر در چنل‌های اجباری"""
+    channels = get_forced_channels()
+    if not channels:
+        return True, []
+    
+    missing = []
+    for ch in channels:
+        try:
+            member = bot.get_chat_member(ch, user_id)
+            if member.status not in ['member', 'administrator', 'creator']:
+                missing.append(ch)
+        except Exception:
+            missing.append(ch)
+    
+    return len(missing) == 0, missing
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 💎 انتقال الماس
+# ══════════════════════════════════════════════════════════════════════════════
 def transfer_tokens(from_owner_id: int, to_tg_id: int, amount: int) -> bool:
     try:
         balance = get_token_balance(from_owner_id)
@@ -1616,6 +1585,38 @@ def transfer_tokens(from_owner_id: int, to_tg_id: int, amount: int) -> bool:
     except Exception as e:
         print(f"❌ transfer_tokens error: {e}")
         return False
+
+
+# 🆕 برای telegram_bot (3).py
+def transfer_diamonds(from_owner_id: int, to_owner_id: int, amount: int) -> tuple:
+    """انتقال الماس بین کاربران - برای telegram_bot (3).py"""
+    if amount <= 0:
+        return False, "❌ مقدار باید بزرگ‌تر از صفر باشد."
+    
+    if from_owner_id == to_owner_id:
+        return False, "❌ نمی‌توانید به خودتان الماس انتقال دهید."
+    
+    try:
+        _init_tokens(from_owner_id)
+        _init_tokens(to_owner_id)
+        
+        balance = get_token_balance(from_owner_id)
+        if balance < amount:
+            return False, f"❌ موجودی کافی ندارید. موجودی: {balance} الماس"
+        
+        deduct_tokens(from_owner_id, amount)
+        add_tokens(to_owner_id, amount)
+        
+        query = """
+            INSERT INTO amel_diamond_transactions (from_owner_id, to_owner_id, amount, type, description)
+            VALUES (%s, %s, %s, 'transfer', 'انتقال الماس')
+        """
+        execute_query(query, (from_owner_id, to_owner_id, amount))
+        
+        return True, f"✅ {amount} الماس با موفقیت انتقال یافت."
+    except Exception as e:
+        print(f"❌ transfer_diamonds error: {e}")
+        return False, f"❌ خطا در انتقال: {str(e)}"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
