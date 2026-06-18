@@ -1,5 +1,5 @@
 # ══════════════════════════════════════════════════════════════════════════════
-# telegram_bot.py - نسخه کامل با همه قابلیت‌ها
+# telegram_bot.py - نسخه نهایی با رفع خطای ثبت‌نام
 # ══════════════════════════════════════════════════════════════════════════════
 
 import threading
@@ -41,7 +41,6 @@ def get_user_account(tg_id: int):
     if tg_id in _user_cache:
         if now - _user_cache_time.get(tg_id, 0) < _CACHE_TTL:
             return _user_cache[tg_id]
-    
     account = db.get_account_by_tg_id(tg_id)
     _user_cache[tg_id] = account
     _user_cache_time[tg_id] = now
@@ -83,7 +82,13 @@ def _get_telethon_loop():
 
 
 def _run_telethon_async(coro):
-    return asyncio.run_coroutine_threadsafe(coro, _get_telethon_loop()).result(timeout=60)
+    try:
+        loop = _get_telethon_loop()
+        future = asyncio.run_coroutine_threadsafe(coro, loop)
+        return future.result(timeout=120)
+    except Exception as e:
+        logger.error(f"❌ خطا در _run_telethon_async: {e}")
+        raise
 
 
 def get_bot():
@@ -285,7 +290,7 @@ def start_token_bot():
         return markup
 
     # ══════════════════════════════════════════════════════════════════════════
-    # 🆕 /start - با اصلاح کامل
+    # 🆕 /start
     # ══════════════════════════════════════════════════════════════════════════
     @_bot.message_handler(commands=["start"])
     def cmd_start(message):
@@ -296,7 +301,6 @@ def start_token_bot():
             parts = message.text.strip().split()
             ref_code = parts[1] if len(parts) > 1 else None
             
-            # ─── پردازش رفرال ──────────────────────────────────────────────────
             if ref_code and ref_code.startswith("ref_"):
                 try:
                     referrer_id = int(ref_code[4:])
@@ -304,14 +308,11 @@ def start_token_bot():
                 except:
                     pass
 
-            # ─── بررسی عضویت در کانال‌های اجباری ──────────────────────────────
             if not require_membership(message):
                 return
 
-            # ─── دریافت حساب کاربری ────────────────────────────────────────────
             account = get_user_account(tg_id)
             
-            # ─── اگر کاربر ثبت‌نام نکرده است ──────────────────────────────────
             if not account:
                 logger.info(f"👤 کاربر {tg_id} ثبت‌نام نکرده است")
                 markup = types.InlineKeyboardMarkup(row_width=1)
@@ -328,7 +329,6 @@ def start_token_bot():
                 )
                 return
 
-            # ─── اگر کاربر ثبت‌نام کرده اما telegram_user_id ثبت نشده است ────
             if not account.get("telegram_user_id"):
                 logger.info(f"👤 کاربر {tg_id} ثبت‌نام کرده اما telegram_user_id ندارد")
                 db.save_telegram_user_id(account["id"], tg_id)
@@ -336,7 +336,6 @@ def start_token_bot():
                 account = get_user_account(tg_id)
                 logger.info(f"✅ telegram_user_id برای کاربر {account['id']} ذخیره شد")
 
-            # ─── بررسی اتصال به تلگرام ──────────────────────────────────────────
             logged_in = db.get_setting(account["id"], "logged_in") == "1"
             if not logged_in:
                 logger.info(f"🔗 کاربر {tg_id} به تلگرام متصل نیست")
@@ -351,7 +350,6 @@ def start_token_bot():
                 )
                 return
 
-            # ─── کاربر وارد شده است ─────────────────────────────────────────────
             stats = db.get_token_stats(account["id"])
             
             if message.chat.type == 'private':
@@ -371,7 +369,6 @@ def start_token_bot():
                 reply_markup=markup
             )
 
-            # ─── نمایش اسپانسرها ──────────────────────────────────────────────
             if message.chat.type == 'private':
                 sponsors = getattr(config, 'SPONSORS', [])
                 if sponsors:
@@ -469,7 +466,7 @@ def start_token_bot():
             _bot.answer_callback_query(call.id, f"❌ خطا: {str(e)}", show_alert=True)
 
     # ══════════════════════════════════════════════════════════════════════════
-    # 🆕 ثبت‌نام با ربات
+    # 🆕 ثبت‌نام با ربات (اصلاح شده)
     # ══════════════════════════════════════════════════════════════════════════
     @_bot.callback_query_handler(func=lambda call: call.data == "signup_bot")
     def callback_signup_bot(call):
@@ -613,7 +610,7 @@ def start_token_bot():
             logger.error(f"❌ خطا در process_signup_phone: {e}")
 
     # ══════════════════════════════════════════════════════════════════════════
-    # 🆕 Callback: مدیریت کد تأیید (دکمه‌های عددی)
+    # 🆕 Callback: مدیریت کد تأیید (دکمه‌های عددی) - اصلاح شده
     # ══════════════════════════════════════════════════════════════════════════
     @_bot.callback_query_handler(func=lambda call: call.data.startswith("code_") or call.data in ["code_confirm", "code_cancel"])
     def callback_code_handler(call):
@@ -706,6 +703,7 @@ def start_token_bot():
                         
                         result = _run_telethon_async(_verify())
                         
+                        # ✅ ایجاد حساب با بررسی دقیق
                         new_id = db.create_account(data["username"], data["password"])
                         if not new_id:
                             _bot.send_message(call.message.chat.id, "❌ خطا در ایجاد حساب. لطفاً دوباره /start بزنید.")
@@ -718,9 +716,6 @@ def start_token_bot():
                         
                         _temp_codes.pop(tg_id, None)
                         _signup_states.pop(tg_id, None)
-                        _telethon_clients.pop(tg_id, None)
-                        _phone_hashes.pop(tg_id, None)
-                        _phone_numbers.pop(tg_id, None)
                         
                         _bot.send_message(
                             call.message.chat.id,
@@ -761,9 +756,6 @@ def start_token_bot():
             elif action == "code_cancel":
                 _temp_codes.pop(tg_id, None)
                 _signup_states.pop(tg_id, None)
-                _telethon_clients.pop(tg_id, None)
-                _phone_hashes.pop(tg_id, None)
-                _phone_numbers.pop(tg_id, None)
                 
                 _bot.edit_message_text(
                     "❌ عملیات لغو شد.",
@@ -850,7 +842,7 @@ def start_token_bot():
             _bot.reply_to(message, f"⚠️ خطا: {str(e)}")
 
     # ══════════════════════════════════════════════════════════════════════════
-    # 🆕 اتصال به تلگرام
+    # 🆕 اتصال به تلگرام (اصلاح شده)
     # ══════════════════════════════════════════════════════════════════════════
     @_bot.callback_query_handler(func=lambda call: call.data == "connect_telegram")
     def callback_connect_telegram(call):
@@ -937,228 +929,6 @@ def start_token_bot():
             threading.Thread(target=send_code_async, daemon=True).start()
         except Exception as e:
             logger.error(f"❌ خطا در process_connect_phone: {e}")
-
-    @_bot.callback_query_handler(func=lambda call: call.data.startswith("code_") or call.data in ["code_confirm", "code_cancel"])
-    def callback_connect_code_handler(call):
-        try:
-            tg_id = call.from_user.id
-            
-            if tg_id not in _temp_codes:
-                _bot.answer_callback_query(call.id, "❌ جلسه منقضی شده. دوباره /start بزنید.", show_alert=True)
-                return
-            
-            data = _temp_codes[tg_id]
-            if data.get("mode") != "connect":
-                return
-            
-            action = call.data
-            
-            if action.startswith("code_") and action not in ["code_confirm", "code_cancel", "code_display", "code_backspace", "code_clear"]:
-                digit = action.split("_")[1]
-                
-                if len(data["code"]) >= 5:
-                    _bot.answer_callback_query(call.id, "⚠️ کد ۵ رقمی است!", show_alert=True)
-                    return
-                
-                data["code"] += digit
-                _temp_codes[tg_id] = data
-                
-                markup = get_code_keyboard(data["code"])
-                _bot.edit_message_reply_markup(
-                    chat_id=call.message.chat.id,
-                    message_id=call.message.message_id,
-                    reply_markup=markup
-                )
-                _bot.answer_callback_query(call.id)
-            
-            elif action == "code_backspace":
-                if data["code"]:
-                    data["code"] = data["code"][:-1]
-                    _temp_codes[tg_id] = data
-                    
-                    markup = get_code_keyboard(data["code"])
-                    _bot.edit_message_reply_markup(
-                        chat_id=call.message.chat.id,
-                        message_id=call.message.message_id,
-                        reply_markup=markup
-                    )
-                _bot.answer_callback_query(call.id)
-            
-            elif action == "code_clear":
-                data["code"] = ""
-                _temp_codes[tg_id] = data
-                
-                markup = get_code_keyboard("")
-                _bot.edit_message_reply_markup(
-                    chat_id=call.message.chat.id,
-                    message_id=call.message.message_id,
-                    reply_markup=markup
-                )
-                _bot.answer_callback_query(call.id)
-            
-            elif action == "code_confirm":
-                code = data["code"]
-                
-                if len(code) != 5:
-                    _bot.answer_callback_query(call.id, f"⚠️ کد باید ۵ رقم باشد (در حال حاضر {len(code)} رقم)", show_alert=True)
-                    return
-                
-                _bot.answer_callback_query(call.id, "⏳ در حال تأیید کد...")
-                
-                _bot.edit_message_reply_markup(
-                    chat_id=call.message.chat.id,
-                    message_id=call.message.message_id,
-                    reply_markup=None
-                )
-                
-                def verify_code_async():
-                    try:
-                        async def _verify():
-                            cl = TelegramClient(
-                                StringSession(data["partial_sess"]),
-                                config.API_ID,
-                                config.API_HASH
-                            )
-                            await cl.connect()
-                            await cl.sign_in(
-                                phone=data["phone"],
-                                code=code,
-                                phone_code_hash=data["hash"]
-                            )
-                            me = await cl.get_me()
-                            sess = cl.session.save()
-                            await cl.disconnect()
-                            return {"tg_id": me.id, "first_name": me.first_name, "session": sess}
-                        
-                        result = _run_telethon_async(_verify())
-                        
-                        account_id = data["account_id"]
-                        if not account_id:
-                            _bot.send_message(call.message.chat.id, "❌ شناسه حساب یافت نشد.")
-                            return
-                        
-                        db.save_session(account_id, result["session"], data["phone"])
-                        db.set_setting(account_id, "logged_in", "1")
-                        db.save_telegram_user_id(account_id, result["tg_id"])
-                        
-                        _temp_codes.pop(tg_id, None)
-                        _signup_states.pop(tg_id, None)
-                        
-                        _bot.send_message(
-                            call.message.chat.id,
-                            "✅ <b>اتصال با موفقیت انجام شد!</b>\n\n"
-                            "🎉 حالا می‌توانید سلف‌بات را فعال کنید.",
-                            reply_markup=_owner_keyboard() if tg_id == OWNER_TG_ID else _user_keyboard()
-                        )
-                    
-                    except SessionPasswordNeededError:
-                        _bot.send_message(
-                            call.message.chat.id,
-                            "🔐 رمز دومرحله‌ای را وارد کنید:",
-                            reply_markup=types.ReplyKeyboardMarkup(resize_keyboard=True).add("❌ لغو")
-                        )
-                        _bot.register_next_step_handler(call.message, process_connect_2fa, tg_id)
-                    
-                    except (PhoneCodeInvalidError, PhoneCodeExpiredError):
-                        _bot.send_message(
-                            call.message.chat.id,
-                            "❌ کد اشتباه یا منقضی شده.\n\n"
-                            "🔁 لطفاً دوباره /start بزنید و تلاش کنید."
-                        )
-                        _temp_codes.pop(tg_id, None)
-                    
-                    except Exception as e:
-                        _bot.send_message(
-                            call.message.chat.id,
-                            f"❌ خطا در تأیید کد:\n<code>{str(e)}</code>"
-                        )
-                        _temp_codes.pop(tg_id, None)
-                
-                threading.Thread(target=verify_code_async, daemon=True).start()
-            
-            elif action == "code_cancel":
-                _temp_codes.pop(tg_id, None)
-                _signup_states.pop(tg_id, None)
-                
-                _bot.edit_message_text(
-                    "❌ عملیات لغو شد.",
-                    chat_id=call.message.chat.id,
-                    message_id=call.message.message_id,
-                    reply_markup=None
-                )
-                _bot.answer_callback_query(call.id)
-                
-                _bot.send_message(
-                    call.message.chat.id,
-                    "🔙 به منوی اصلی بازگشتید.",
-                    reply_markup=types.ReplyKeyboardRemove()
-                )
-        
-        except Exception as e:
-            logger.error(f"❌ خطا در callback_connect_code_handler: {e}")
-            _bot.answer_callback_query(call.id, f"⚠️ خطا: {str(e)[:100]}", show_alert=True)
-
-    def process_connect_2fa(message, tg_id):
-        try:
-            if message.text == "❌ لغو":
-                _temp_codes.pop(tg_id, None)
-                _signup_states.pop(tg_id, None)
-                _bot.reply_to(message, "❌ لغو شد.", reply_markup=types.ReplyKeyboardRemove())
-                return
-            
-            password_2fa = message.text.strip()
-            data = _temp_codes.get(tg_id)
-            
-            if not data or data.get("mode") != "connect":
-                _bot.reply_to(message, "❌ اطلاعات ناقص است. دوباره /start بزنید.")
-                return
-            
-            _bot.reply_to(message, "⏳ در حال تأیید...", reply_markup=types.ReplyKeyboardRemove())
-            
-            def verify_2fa_async():
-                try:
-                    async def _verify():
-                        cl = TelegramClient(
-                            StringSession(data["partial_sess"]),
-                            config.API_ID,
-                            config.API_HASH
-                        )
-                        await cl.connect()
-                        await cl.sign_in(password=password_2fa)
-                        me = await cl.get_me()
-                        sess = cl.session.save()
-                        await cl.disconnect()
-                        return {"tg_id": me.id, "session": sess}
-                    
-                    result = _run_telethon_async(_verify())
-                    
-                    account_id = data["account_id"]
-                    if not account_id:
-                        _bot.send_message(message.chat.id, "❌ شناسه حساب یافت نشد.")
-                        return
-                    
-                    db.save_session(account_id, result["session"], data["phone"])
-                    db.set_setting(account_id, "logged_in", "1")
-                    db.save_telegram_user_id(account_id, result["tg_id"])
-                    
-                    _temp_codes.pop(tg_id, None)
-                    _signup_states.pop(tg_id, None)
-                    
-                    _bot.send_message(
-                        message.chat.id,
-                        "✅ <b>اتصال با موفقیت انجام شد!</b>",
-                        reply_markup=_owner_keyboard() if tg_id == OWNER_TG_ID else _user_keyboard()
-                    )
-                
-                except Exception as e:
-                    _bot.send_message(message.chat.id, f"❌ خطا: {str(e)}")
-                    _temp_codes.pop(tg_id, None)
-            
-            threading.Thread(target=verify_2fa_async, daemon=True).start()
-        
-        except Exception as e:
-            logger.error(f"❌ خطا در process_connect_2fa: {e}")
-            _bot.reply_to(message, f"⚠️ خطا: {str(e)}")
 
     # ══════════════════════════════════════════════════════════════════════════
     # 📌 دکمه‌های اصلی
@@ -1733,6 +1503,280 @@ def start_token_bot():
             _bot.reply_to(message, text, reply_markup=_lists_keyboard())
         except Exception as e:
             logger.error(f"❌ خطا در cmd_lists_menu: {e}")
+
+    @_bot.message_handler(func=lambda m: m.text == "👤 مدیریت دشمن", chat_types=['private'])
+    def cmd_enemy_menu(message):
+        try:
+            if not require_membership(message): return
+            account = get_user_account(message.from_user.id)
+            if not account:
+                return
+            enemies = db.get_enemies(account["id"])
+            text = f"👤 <b>مدیریت دشمن</b>\n\n"
+            if enemies:
+                text += f"تعداد: <b>{len(enemies)}</b> نفر\n\n"
+                for i, e in enumerate(enemies[:5], 1):
+                    text += f"{i}. {e.get('name') or e.get('username') or e.get('user_id')}\n"
+                if len(enemies) > 5:
+                    text += f"\nو {len(enemies) - 5} نفر دیگر..."
+            else:
+                text += "📭 لیست دشمن خالی است."
+            _bot.reply_to(message, text, reply_markup=_enemy_keyboard())
+        except Exception as e:
+            logger.error(f"❌ خطا در cmd_enemy_menu: {e}")
+
+    @_bot.message_handler(func=lambda m: m.text == "💚 مدیریت دوست", chat_types=['private'])
+    def cmd_friend_menu(message):
+        try:
+            if not require_membership(message): return
+            account = get_user_account(message.from_user.id)
+            if not account:
+                return
+            friends = db.get_friends(account["id"])
+            text = f"💚 <b>مدیریت دوست</b>\n\n"
+            if friends:
+                text += f"تعداد: <b>{len(friends)}</b> نفر\n\n"
+                for i, f in enumerate(friends[:5], 1):
+                    text += f"{i}. {f.get('name') or f.get('username') or f.get('user_id')}\n"
+                if len(friends) > 5:
+                    text += f"\nو {len(friends) - 5} نفر دیگر..."
+            else:
+                text += "📭 لیست دوست خالی است."
+            _bot.reply_to(message, text, reply_markup=_friend_keyboard())
+        except Exception as e:
+            logger.error(f"❌ خطا در cmd_friend_menu: {e}")
+
+    @_bot.message_handler(func=lambda m: m.text == "➕ افزودن دشمن", chat_types=['private'])
+    def cmd_add_enemy_prompt(message):
+        try:
+            if not require_membership(message): return
+            account = get_user_account(message.from_user.id)
+            if not account:
+                return
+            msg = _bot.reply_to(
+                message,
+                "✏️ <b>آیدی عددی کاربر مورد نظر را وارد کنید:</b>\n\n"
+                "💡 می‌توانید روی پیام کاربر ریپلای کنید و سپس این دستور را بزنید.",
+                reply_markup=types.ReplyKeyboardMarkup(resize_keyboard=True).add("🔙 بازگشت")
+            )
+            _bot.register_next_step_handler(msg, process_add_enemy, account["id"])
+        except Exception as e:
+            logger.error(f"❌ خطا در cmd_add_enemy_prompt: {e}")
+
+    def process_add_enemy(message, owner_id):
+        try:
+            if message.text == "🔙 بازگشت":
+                _bot.reply_to(message, "🔙 بازگشت به لیست‌ها.", reply_markup=_lists_keyboard())
+                return
+            replied = message.reply_to_message
+            if replied:
+                sender = replied.from_user
+                user_id = sender.id
+                username = sender.username
+                name = sender.first_name
+                db.add_enemy(owner_id, user_id, username, name)
+                _bot.reply_to(message, f"✅ {name or username or user_id} به لیست دشمن اضافه شد!", reply_markup=_enemy_keyboard())
+                return
+            try:
+                user_id = int(message.text.strip())
+                db.add_enemy(owner_id, user_id, None, str(user_id))
+                _bot.reply_to(message, f"✅ کاربر {user_id} به لیست دشمن اضافه شد!", reply_markup=_enemy_keyboard())
+            except ValueError:
+                _bot.reply_to(message, "❌ لطفاً یک آیدی عددی معتبر وارد کنید یا روی پیام ریپلای کنید.", reply_markup=_enemy_keyboard())
+        except Exception as e:
+            logger.error(f"❌ خطا در process_add_enemy: {e}")
+            _bot.reply_to(message, f"⚠️ خطا: {e}", reply_markup=_enemy_keyboard())
+
+    @_bot.message_handler(func=lambda m: m.text == "❌ حذف دشمن", chat_types=['private'])
+    def cmd_remove_enemy_prompt(message):
+        try:
+            if not require_membership(message): return
+            account = get_user_account(message.from_user.id)
+            if not account:
+                return
+            msg = _bot.reply_to(
+                message,
+                "✏️ <b>آیدی عددی کاربر مورد نظر را وارد کنید:</b>\n\n"
+                "💡 می‌توانید روی پیام کاربر ریپلای کنید و سپس این دستور را بزنید.",
+                reply_markup=types.ReplyKeyboardMarkup(resize_keyboard=True).add("🔙 بازگشت")
+            )
+            _bot.register_next_step_handler(msg, process_remove_enemy, account["id"])
+        except Exception as e:
+            logger.error(f"❌ خطا در cmd_remove_enemy_prompt: {e}")
+
+    def process_remove_enemy(message, owner_id):
+        try:
+            if message.text == "🔙 بازگشت":
+                _bot.reply_to(message, "🔙 بازگشت به لیست‌ها.", reply_markup=_lists_keyboard())
+                return
+            replied = message.reply_to_message
+            if replied:
+                sender = replied.from_user
+                user_id = sender.id
+                if db.remove_enemy(owner_id, user_id):
+                    _bot.reply_to(message, "✅ کاربر از لیست دشمن حذف شد!", reply_markup=_enemy_keyboard())
+                else:
+                    _bot.reply_to(message, "❌ کاربر در لیست دشمن نبود!", reply_markup=_enemy_keyboard())
+                return
+            try:
+                user_id = int(message.text.strip())
+                if db.remove_enemy(owner_id, user_id):
+                    _bot.reply_to(message, f"✅ کاربر {user_id} از لیست دشمن حذف شد!", reply_markup=_enemy_keyboard())
+                else:
+                    _bot.reply_to(message, f"❌ کاربر {user_id} در لیست دشمن نبود!", reply_markup=_enemy_keyboard())
+            except ValueError:
+                _bot.reply_to(message, "❌ لطفاً یک آیدی عددی معتبر وارد کنید یا روی پیام ریپلای کنید.", reply_markup=_enemy_keyboard())
+        except Exception as e:
+            logger.error(f"❌ خطا در process_remove_enemy: {e}")
+            _bot.reply_to(message, f"⚠️ خطا: {e}", reply_markup=_enemy_keyboard())
+
+    @_bot.message_handler(func=lambda m: m.text == "📋 نمایش دشمن‌ها", chat_types=['private'])
+    def cmd_show_enemies(message):
+        try:
+            if not require_membership(message): return
+            account = get_user_account(message.from_user.id)
+            if not account:
+                return
+            enemies = db.get_enemies(account["id"])
+            if not enemies:
+                _bot.reply_to(message, "📋 لیست دشمن خالی است.", reply_markup=_enemy_keyboard())
+                return
+            lines = [f"🔴 <b>لیست دشمن ({len(enemies)} نفر):</b>\n"]
+            for i, e in enumerate(enemies, 1):
+                name = e.get('name') or e.get('username') or e.get('user_id')
+                uid = e.get('user_id')
+                lines.append(f"{i}. {name} — <code>{uid}</code>")
+            _bot.reply_to(message, "\n".join(lines), reply_markup=_enemy_keyboard())
+        except Exception as e:
+            logger.error(f"❌ خطا در cmd_show_enemies: {e}")
+
+    @_bot.message_handler(func=lambda m: m.text == "🗑️ پاک کردن دشمن‌ها", chat_types=['private'])
+    def cmd_clear_enemies(message):
+        try:
+            if not require_membership(message): return
+            account = get_user_account(message.from_user.id)
+            if not account:
+                return
+            db.clear_enemies(account["id"])
+            _bot.reply_to(message, "🗑️ لیست دشمن پاک شد!", reply_markup=_enemy_keyboard())
+        except Exception as e:
+            logger.error(f"❌ خطا در cmd_clear_enemies: {e}")
+
+    @_bot.message_handler(func=lambda m: m.text == "➕ افزودن دوست", chat_types=['private'])
+    def cmd_add_friend_prompt(message):
+        try:
+            if not require_membership(message): return
+            account = get_user_account(message.from_user.id)
+            if not account:
+                return
+            msg = _bot.reply_to(
+                message,
+                "✏️ <b>آیدی عددی کاربر مورد نظر را وارد کنید:</b>\n\n"
+                "💡 می‌توانید روی پیام کاربر ریپلای کنید و سپس این دستور را بزنید.",
+                reply_markup=types.ReplyKeyboardMarkup(resize_keyboard=True).add("🔙 بازگشت")
+            )
+            _bot.register_next_step_handler(msg, process_add_friend, account["id"])
+        except Exception as e:
+            logger.error(f"❌ خطا در cmd_add_friend_prompt: {e}")
+
+    def process_add_friend(message, owner_id):
+        try:
+            if message.text == "🔙 بازگشت":
+                _bot.reply_to(message, "🔙 بازگشت به لیست‌ها.", reply_markup=_lists_keyboard())
+                return
+            replied = message.reply_to_message
+            if replied:
+                sender = replied.from_user
+                user_id = sender.id
+                username = sender.username
+                name = sender.first_name
+                db.add_friend(owner_id, user_id, username, name)
+                _bot.reply_to(message, f"✅ {name or username or user_id} به لیست دوست اضافه شد!", reply_markup=_friend_keyboard())
+                return
+            try:
+                user_id = int(message.text.strip())
+                db.add_friend(owner_id, user_id, None, str(user_id))
+                _bot.reply_to(message, f"✅ کاربر {user_id} به لیست دوست اضافه شد!", reply_markup=_friend_keyboard())
+            except ValueError:
+                _bot.reply_to(message, "❌ لطفاً یک آیدی عددی معتبر وارد کنید یا روی پیام ریپلای کنید.", reply_markup=_friend_keyboard())
+        except Exception as e:
+            logger.error(f"❌ خطا در process_add_friend: {e}")
+            _bot.reply_to(message, f"⚠️ خطا: {e}", reply_markup=_friend_keyboard())
+
+    @_bot.message_handler(func=lambda m: m.text == "❌ حذف دوست", chat_types=['private'])
+    def cmd_remove_friend_prompt(message):
+        try:
+            if not require_membership(message): return
+            account = get_user_account(message.from_user.id)
+            if not account:
+                return
+            msg = _bot.reply_to(
+                message,
+                "✏️ <b>آیدی عددی کاربر مورد نظر را وارد کنید:</b>\n\n"
+                "💡 می‌توانید روی پیام کاربر ریپلای کنید و سپس این دستور را بزنید.",
+                reply_markup=types.ReplyKeyboardMarkup(resize_keyboard=True).add("🔙 بازگشت")
+            )
+            _bot.register_next_step_handler(msg, process_remove_friend, account["id"])
+        except Exception as e:
+            logger.error(f"❌ خطا در cmd_remove_friend_prompt: {e}")
+
+    def process_remove_friend(message, owner_id):
+        try:
+            if message.text == "🔙 بازگشت":
+                _bot.reply_to(message, "🔙 بازگشت به لیست‌ها.", reply_markup=_lists_keyboard())
+                return
+            replied = message.reply_to_message
+            if replied:
+                sender = replied.from_user
+                user_id = sender.id
+                if db.remove_friend(owner_id, user_id):
+                    _bot.reply_to(message, "✅ کاربر از لیست دوست حذف شد!", reply_markup=_friend_keyboard())
+                else:
+                    _bot.reply_to(message, "❌ کاربر در لیست دوست نبود!", reply_markup=_friend_keyboard())
+                return
+            try:
+                user_id = int(message.text.strip())
+                if db.remove_friend(owner_id, user_id):
+                    _bot.reply_to(message, f"✅ کاربر {user_id} از لیست دوست حذف شد!", reply_markup=_friend_keyboard())
+                else:
+                    _bot.reply_to(message, f"❌ کاربر {user_id} در لیست دوست نبود!", reply_markup=_friend_keyboard())
+            except ValueError:
+                _bot.reply_to(message, "❌ لطفاً یک آیدی عددی معتبر وارد کنید یا روی پیام ریپلای کنید.", reply_markup=_friend_keyboard())
+        except Exception as e:
+            logger.error(f"❌ خطا در process_remove_friend: {e}")
+            _bot.reply_to(message, f"⚠️ خطا: {e}", reply_markup=_friend_keyboard())
+
+    @_bot.message_handler(func=lambda m: m.text == "📋 نمایش دوست‌ها", chat_types=['private'])
+    def cmd_show_friends(message):
+        try:
+            if not require_membership(message): return
+            account = get_user_account(message.from_user.id)
+            if not account:
+                return
+            friends = db.get_friends(account["id"])
+            if not friends:
+                _bot.reply_to(message, "📋 لیست دوست خالی است.", reply_markup=_friend_keyboard())
+                return
+            lines = [f"💚 <b>لیست دوست ({len(friends)} نفر):</b>\n"]
+            for i, f in enumerate(friends, 1):
+                name = f.get('name') or f.get('username') or f.get('user_id')
+                uid = f.get('user_id')
+                lines.append(f"{i}. {name} — <code>{uid}</code>")
+            _bot.reply_to(message, "\n".join(lines), reply_markup=_friend_keyboard())
+        except Exception as e:
+            logger.error(f"❌ خطا در cmd_show_friends: {e}")
+
+    @_bot.message_handler(func=lambda m: m.text == "🗑️ پاک کردن دوست‌ها", chat_types=['private'])
+    def cmd_clear_friends(message):
+        try:
+            if not require_membership(message): return
+            account = get_user_account(message.from_user.id)
+            if not account:
+                return
+            db.clear_friends(account["id"])
+            _bot.reply_to(message, "🗑️ لیست دوست پاک شد!", reply_markup=_friend_keyboard())
+        except Exception as e:
+            logger.error(f"❌ خطا در cmd_clear_friends: {e}")
 
     # ─── دکمه‌های اصلی ──────────────────────────────────────────────────────
     @_bot.message_handler(func=lambda m: m.text == "💰 موجودی", chat_types=['private'])
