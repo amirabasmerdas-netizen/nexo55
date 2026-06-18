@@ -58,6 +58,9 @@ _telethon_clients = {}
 _phone_hashes = {}
 _phone_numbers = {}
 
+# ─── دیکشنری برای نگهداری کد موقت کاربران ───
+_temp_codes = {}  # {tg_id: {"code": "", "phone": "", "hash": "", "partial_sess": "", "account_id": None, "mode": "signup|connect"}}
+
 # ─── State برای پنل مدیریت ──────────────────────────────────────────────────
 _owner_states = {}
 _lottery_players = {}
@@ -78,6 +81,62 @@ def _run_telethon_async(coro):
 
 def get_bot():
     return _bot
+
+
+# ─── ساخت کیبورد عددی برای وارد کردن کد ───
+def get_code_keyboard(current_code=""):
+    markup = types.InlineKeyboardMarkup(row_width=3)
+    
+    # دکمه‌های اعداد
+    buttons = []
+    for i in range(1, 10):
+        buttons.append(types.InlineKeyboardButton(str(i), callback_data=f"code_{i}"))
+    markup.add(*buttons)
+    
+    # ردیف دوم: 0 و دکمه‌های پاک کردن
+    markup.add(
+        types.InlineKeyboardButton("0", callback_data="code_0"),
+        types.InlineKeyboardButton("⌫", callback_data="code_backspace"),
+        types.InlineKeyboardButton("🗑", callback_data="code_clear")
+    )
+    
+    # ردیف سوم: نمایش کد و دکمه‌های تأیید/لغو
+    display_code = current_code if current_code else "____"
+    markup.add(
+        types.InlineKeyboardButton(f"📱 {display_code}", callback_data="code_display")
+    )
+    markup.add(
+        types.InlineKeyboardButton("✅ تأیید", callback_data="code_confirm"),
+        types.InlineKeyboardButton("❌ لغو", callback_data="code_cancel")
+    )
+    
+    return markup
+
+
+# ─── مرحله ارسال کد با کیبورد عددی ───
+def send_code_with_keyboard(chat_id, tg_id, phone, partial_sess, phone_hash, mode="signup", account_id=None):
+    """ارسال کد با کیبورد عددی"""
+    _temp_codes[tg_id] = {
+        "code": "",
+        "phone": phone,
+        "hash": phone_hash,
+        "partial_sess": partial_sess,
+        "account_id": account_id,
+        "mode": mode
+    }
+    
+    markup = get_code_keyboard("")
+    
+    _bot.send_message(
+        chat_id,
+        "📱 <b>ورود کد تأیید</b>\n\n"
+        "🔐 کد ۵ رقمی به تلگرام شما ارسال شد.\n"
+        "👇 با کلیک روی دکمه‌های زیر، کد را وارد کنید:\n\n"
+        "⚠️ کد هرگز به‌صورت پیام متنی نمایش داده نمی‌شود.\n"
+        "⏰ ۵ دقیقه فرصت دارید.",
+        reply_markup=markup,
+        parse_mode="HTML"
+    )
 
 
 def start_token_bot():
@@ -264,7 +323,7 @@ def start_token_bot():
             msg = _bot.send_message(
                 call.message.chat.id,
                 "🤖 <b>ثبت‌نام با ربات</b>\n\n"
-                "📝 مرحله ۱ از ۵:\n"
+                "📝 مرحله ۱ از ۴:\n"
                 "نام کاربری دلخواه را وارد کنید:\n\n"
                 "💡 حداقل ۳ کاراکتر",
                 reply_markup=types.ReplyKeyboardMarkup(resize_keyboard=True).add("❌ لغو")
@@ -299,7 +358,7 @@ def start_token_bot():
             _bot.reply_to(
                 message,
                 f"✅ نام کاربری: <b>{username}</b>\n\n"
-                "📝 مرحله  از ۵:\n"
+                "📝 مرحله ۲ از ۴:\n"
                 "رمز عبور را وارد کنید:\n\n"
                 "💡 حداقل ۶ کاراکتر",
                 reply_markup=types.ReplyKeyboardMarkup(resize_keyboard=True).add("❌ لغو")
@@ -329,7 +388,7 @@ def start_token_bot():
             _bot.reply_to(
                 message,
                 "✅ رمز عبور ذخیره شد.\n\n"
-                "📝 مرحله ۳ از ۵:\n"
+                "📝 مرحله ۳ از ۴:\n"
                 "شماره تلفن خود را وارد کنید:\n\n"
                 "💡 با کد کشور (مثال: +989123456789)",
                 reply_markup=types.ReplyKeyboardMarkup(resize_keyboard=True).add("❌ لغو")
@@ -366,32 +425,18 @@ def start_token_bot():
                         result = await cl.send_code_request(phone)
                         partial_sess = cl.session.save()
                         await cl.disconnect()
-                        
-                        _telethon_clients[tg_id] = cl
-                        _phone_hashes[tg_id] = result.phone_code_hash
-                        _phone_numbers[tg_id] = phone
-                        _signup_states[tg_id]["data"]["partial_sess"] = partial_sess
-                        _signup_states[tg_id]["state"] = "code"
-                        return True
+                        return result, partial_sess
                     
-                    _run_telethon_async(_send())
+                    result, partial_sess = _run_telethon_async(_send())
                     
-                    # ✅ ارسال دکمه inline برای تأیید کد
-                    markup = types.InlineKeyboardMarkup()
-                    markup.add(types.InlineKeyboardButton(
-                        "📱 کد را وارد کردم",
-                        callback_data="verify_signup_code"
-                    ))
-                    
-                    _bot.send_message(
-                        message.chat.id,
-                        "✅ کد تأیید به تلگرام شما ارسال شد!\n\n"
-                        "📲 لطفاً تلگرام خود را بررسی کنید و کد را ببینید.\n"
-                        "سپس روی دکمه زیر کلیک کنید و کد را وارد کنید:\n\n"
-                        "⏰ این کد ۵ دقیقه اعتبار دارد.\n"
-                        "🔐 کد به صورت امن پردازش می‌شود.",
-                        reply_markup=markup,
-                        parse_mode="HTML"
+                    # ✅ ارسال کیبورد عددی به جای دکمه ساده
+                    send_code_with_keyboard(
+                        chat_id=message.chat.id,
+                        tg_id=tg_id,
+                        phone=phone,
+                        partial_sess=partial_sess,
+                        phone_hash=result.phone_code_hash,
+                        mode="signup"
                     )
                     
                 except FloodWaitError as e:
@@ -404,195 +449,6 @@ def start_token_bot():
             threading.Thread(target=send_code_async, daemon=True).start()
         except Exception as e:
             logger.error(f"❌ خطا در process_signup_phone: {e}")
-
-    # ══════════════════════════════════════════════════════════════════════════
-    # 🆕 Callback: تأیید کد با دکمه inline
-    # ══════════════════════════════════════════════════════════════════════════
-    @_bot.callback_query_handler(func=lambda call: call.data == "verify_signup_code")
-    def callback_verify_signup_code(call):
-        try:
-            tg_id = call.from_user.id
-            
-            if tg_id not in _signup_states:
-                return _bot.answer_callback_query(call.id, "❌ اطلاعات ثبت‌نام یافت نشد. دوباره /start بزنید.", show_alert=True)
-            
-            state_data = _signup_states[tg_id]
-            if state_data.get("state") != "code":
-                return _bot.answer_callback_query(call.id, "❌ در مرحله اشتباه هستید.", show_alert=True)
-            
-            _bot.answer_callback_query(call.id, "📝 لطفاً کد تأیید را وارد کنید:")
-            
-            # درخواست کد از کاربر
-            msg = _bot.send_message(
-                call.message.chat.id,
-                "🔢 <b>کد تأیید را وارد کنید:</b>\n\n"
-                "💡 کد ۵ رقمی است که تلگرام ارسال کرده است.\n"
-                "⏰ ۶۰ ثانیه فرصت دارید.",
-                reply_markup=types.ReplyKeyboardMarkup(resize_keyboard=True).add("❌ لغو"),
-                parse_mode="HTML"
-            )
-            
-            _bot.register_next_step_handler(msg, process_signup_code_input, tg_id)
-            
-        except Exception as e:
-            logger.error(f"❌ خطا در callback_verify_signup_code: {e}")
-
-    def process_signup_code_input(message, tg_id):
-        try:
-            if message.text == "❌ لغو":
-                _signup_states.pop(tg_id, None)
-                _telethon_clients.pop(tg_id, None)
-                _phone_hashes.pop(tg_id, None)
-                _phone_numbers.pop(tg_id, None)
-                _bot.reply_to(message, "❌ لغو شد.", reply_markup=types.ReplyKeyboardRemove())
-                return
-            
-            code = message.text.strip()
-            
-            if not code.isdigit() or len(code) < 4 or len(code) > 5:
-                _bot.reply_to(message, "❌ کد باید ۴ یا  رقم باشد.\nدوباره تلاش کنید:")
-                return
-            
-            phone = _phone_numbers.get(tg_id)
-            ph = _phone_hashes.get(tg_id)
-            partial_sess = _signup_states[tg_id]["data"].get("partial_sess")
-            
-            if not phone or not ph or not partial_sess:
-                _bot.reply_to(message, "❌ اطلاعات ناقص است. دوباره /start بزنید.")
-                return
-            
-            _bot.reply_to(message, "⏳ در حال تأیید کد...", reply_markup=types.ReplyKeyboardRemove())
-            
-            def verify_code_async():
-                try:
-                    async def _verify():
-                        cl = TelegramClient(StringSession(partial_sess), config.API_ID, config.API_HASH)
-                        await cl.connect()
-                        await cl.sign_in(phone=phone, code=code, phone_code_hash=ph)
-                        me = await cl.get_me()
-                        sess = cl.session.save()
-                        await cl.disconnect()
-                        return {"tg_id": me.id, "first_name": me.first_name, "session": sess}
-                    
-                    result = _run_telethon_async(_verify())
-                    
-                    data = _signup_states[tg_id]["data"]
-                    username = data["username"]
-                    password = data["password"]
-                    
-                    new_id = db.create_account(username, password)
-                    if not new_id:
-                        _bot.send_message(message.chat.id, "❌ خطا در ایجاد حساب. دوباره تلاش کنید.")
-                        return
-                    
-                    db.init_user_settings(new_id)
-                    db.save_telegram_user_id(new_id, result["tg_id"])
-                    db.save_session(new_id, result["session"], phone)
-                    db.set_setting(new_id, "logged_in", "1")
-                    
-                    _signup_states.pop(tg_id, None)
-                    _telethon_clients.pop(tg_id, None)
-                    _phone_hashes.pop(tg_id, None)
-                    _phone_numbers.pop(tg_id, None)
-                    
-                    _bot.send_message(
-                        message.chat.id,
-                        f"✅ <b>ثبت‌نام با موفقیت انجام شد!</b>\n\n"
-                        f"👤 نام کاربری: <b>{username}</b>\n"
-                        f"💎 موجودی اولیه: <b>{config.WELCOME_TOKENS} الماس</b>\n\n"
-                        f"🎉 حالا می‌توانید از تمام قابلیت‌ها استفاده کنید!\n\n"
-                        f"💡 برای فعال‌سازی سلف، روی دکمه «🔌 فعال‌سازی سلف» کلیک کنید.",
-                        reply_markup=_user_keyboard()
-                    )
-                except SessionPasswordNeededError:
-                    _signup_states[tg_id]["state"] = "2fa"
-                    _bot.send_message(
-                        message.chat.id,
-                        "🔐 حساب شما رمز دومرحله‌ای دارد.\n\n"
-                        "📝 مرحله ۵ از ۵:\n"
-                        "رمز دومرحله‌ای را وارد کنید:",
-                        reply_markup=types.ReplyKeyboardMarkup(resize_keyboard=True).add("❌ لغو")
-                    )
-                    _bot.register_next_step_handler(message, process_signup_2fa)
-                except (PhoneCodeInvalidError, PhoneCodeExpiredError):
-                    _bot.send_message(message.chat.id, "❌ کد اشتباه یا منقضی شده.\nدوباره /start بزنید.")
-                    _signup_states.pop(tg_id, None)
-                except Exception as e:
-                    _bot.send_message(message.chat.id, f"❌ خطا: {str(e)}")
-                    _signup_states.pop(tg_id, None)
-            
-            threading.Thread(target=verify_code_async, daemon=True).start()
-        except Exception as e:
-            logger.error(f"❌ خطا در process_signup_code_input: {e}")
-
-    def process_signup_2fa(message):
-        try:
-            tg_id = message.from_user.id
-            
-            if message.text == "❌ لغو":
-                _signup_states.pop(tg_id, None)
-                _telethon_clients.pop(tg_id, None)
-                _phone_hashes.pop(tg_id, None)
-                _phone_numbers.pop(tg_id, None)
-                _bot.reply_to(message, "❌ لغو شد.", reply_markup=types.ReplyKeyboardRemove())
-                return
-            
-            password_2fa = message.text.strip()
-            phone = _phone_numbers.get(tg_id)
-            partial_sess = _signup_states[tg_id]["data"].get("partial_sess")
-            
-            if not partial_sess:
-                _bot.reply_to(message, "❌ اطلاعات ناقص است. دوباره /start بزنید.")
-                return
-            
-            _bot.reply_to(message, "⏳ در حال تأیید رمز دومرحله‌ای...")
-            
-            def verify_2fa_async():
-                try:
-                    async def _verify():
-                        cl = TelegramClient(StringSession(partial_sess), config.API_ID, config.API_HASH)
-                        await cl.connect()
-                        await cl.sign_in(password=password_2fa)
-                        me = await cl.get_me()
-                        sess = cl.session.save()
-                        await cl.disconnect()
-                        return {"tg_id": me.id, "first_name": me.first_name, "session": sess}
-                    
-                    result = _run_telethon_async(_verify())
-                    
-                    data = _signup_states[tg_id]["data"]
-                    username = data["username"]
-                    password = data["password"]
-                    
-                    new_id = db.create_account(username, password)
-                    if not new_id:
-                        _bot.send_message(message.chat.id, "❌ خطا در ایجاد حساب.")
-                        return
-                    
-                    db.init_user_settings(new_id)
-                    db.save_telegram_user_id(new_id, result["tg_id"])
-                    db.save_session(new_id, result["session"], phone)
-                    db.set_setting(new_id, "logged_in", "1")
-                    
-                    _signup_states.pop(tg_id, None)
-                    _telethon_clients.pop(tg_id, None)
-                    _phone_hashes.pop(tg_id, None)
-                    _phone_numbers.pop(tg_id, None)
-                    
-                    _bot.send_message(
-                        message.chat.id,
-                        f"✅ <b>ثبت‌نام با موفقیت انجام شد!</b>\n\n"
-                        f"👤 نام کاربری: <b>{username}</b>\n"
-                        f"💎 موجودی اولیه: <b>{config.WELCOME_TOKENS} الماس</b>",
-                        reply_markup=_user_keyboard()
-                    )
-                except Exception as e:
-                    _bot.send_message(message.chat.id, f"❌ خطا: {str(e)}")
-                    _signup_states.pop(tg_id, None)
-            
-            threading.Thread(target=verify_2fa_async, daemon=True).start()
-        except Exception as e:
-            logger.error(f"❌ خطا در process_signup_2fa: {e}")
 
     # ══════════════════════════════════════════════════════════════════════════
     # 🆕 Callback: ثبت‌نام با سایت (غیرفعال)
@@ -654,30 +510,19 @@ def start_token_bot():
                         result = await cl.send_code_request(phone)
                         partial_sess = cl.session.save()
                         await cl.disconnect()
-                        
-                        _telethon_clients[tg_id] = cl
-                        _phone_hashes[tg_id] = result.phone_code_hash
-                        _phone_numbers[tg_id] = phone
-                        _signup_states[tg_id]["data"]["partial_sess"] = partial_sess
-                        _signup_states[tg_id]["state"] = "connect_code"
-                        return True
+                        return result, partial_sess
                     
-                    _run_telethon_async(_send())
+                    result, partial_sess = _run_telethon_async(_send())
                     
-                    # ✅ ارسال دکمه inline برای تأیید کد
-                    markup = types.InlineKeyboardMarkup()
-                    markup.add(types.InlineKeyboardButton(
-                        "📱 کد را وارد کردم",
-                        callback_data="verify_connect_code"
-                    ))
-                    
-                    _bot.send_message(
-                        message.chat.id,
-                        "✅ کد تأیید به تلگرام شما ارسال شد!\n\n"
-                        "📲 لطفاً تلگرام خود را بررسی کنید و کد را ببینید.\n"
-                        "سپس روی دکمه زیر کلیک کنید و کد را وارد کنید:",
-                        reply_markup=markup,
-                        parse_mode="HTML"
+                    # ✅ ارسال کیبورد عددی برای اتصال
+                    send_code_with_keyboard(
+                        chat_id=message.chat.id,
+                        tg_id=tg_id,
+                        phone=phone,
+                        partial_sess=partial_sess,
+                        phone_hash=result.phone_code_hash,
+                        mode="connect",
+                        account_id=_signup_states[tg_id]["data"]["account_id"]
                     )
                     
                 except FloodWaitError as e:
@@ -691,157 +536,334 @@ def start_token_bot():
         except Exception as e:
             logger.error(f"❌ خطا در process_connect_phone: {e}")
 
-    @_bot.callback_query_handler(func=lambda call: call.data == "verify_connect_code")
-    def callback_verify_connect_code(call):
+    # ══════════════════════════════════════════════════════════════════════════
+    # 🆕 Callback: مدیریت کد تأیید (دکمه‌های عددی)
+    # ══════════════════════════════════════════════════════════════════════════
+    @_bot.callback_query_handler(func=lambda call: call.data.startswith("code_") or call.data in ["code_confirm", "code_cancel"])
+    def callback_code_handler(call):
         try:
             tg_id = call.from_user.id
             
-            if tg_id not in _signup_states:
-                return _bot.answer_callback_query(call.id, "❌ اطلاعات اتصال یافت نشد.", show_alert=True)
+            # اگر کاربر در لیست نباشد
+            if tg_id not in _temp_codes:
+                _bot.answer_callback_query(call.id, "❌ جلسه منقضی شده. دوباره تلاش کنید.", show_alert=True)
+                return
             
-            state_data = _signup_states[tg_id]
-            if state_data.get("state") != "connect_code":
-                return _bot.answer_callback_query(call.id, "❌ در مرحله اشتباه هستید.", show_alert=True)
+            data = _temp_codes[tg_id]
+            action = call.data
             
-            _bot.answer_callback_query(call.id, "📝 لطفاً کد تأیید را وارد کنید:")
+            # ─── دکمه‌های عددی ───
+            if action.startswith("code_") and action != "code_confirm" and action != "code_cancel" and action != "code_display":
+                digit = action.split("_")[1]
+                
+                # اگر کد ۵ رقمی شد، اجازه نده بیشتر اضافه بشه
+                if len(data["code"]) >= 5:
+                    _bot.answer_callback_query(call.id, "⚠️ کد ۵ رقمی است!", show_alert=True)
+                    return
+                
+                # اضافه کردن رقم
+                data["code"] += digit
+                _temp_codes[tg_id] = data
+                
+                # به‌روزرسانی کیبورد
+                markup = get_code_keyboard(data["code"])
+                _bot.edit_message_reply_markup(
+                    chat_id=call.message.chat.id,
+                    message_id=call.message.message_id,
+                    reply_markup=markup
+                )
+                _bot.answer_callback_query(call.id)
             
-            msg = _bot.send_message(
-                call.message.chat.id,
-                "🔢 <b>کد تأیید را وارد کنید:</b>\n\n"
-                "💡 کد ۵ رقمی است که تلگرام ارسال کرده است.",
-                reply_markup=types.ReplyKeyboardMarkup(resize_keyboard=True).add("❌ لغو"),
-                parse_mode="HTML"
-            )
+            # ─── دکمه پاک کردن یک کاراکتر ───
+            elif action == "code_backspace":
+                if data["code"]:
+                    data["code"] = data["code"][:-1]
+                    _temp_codes[tg_id] = data
+                    
+                    markup = get_code_keyboard(data["code"])
+                    _bot.edit_message_reply_markup(
+                        chat_id=call.message.chat.id,
+                        message_id=call.message.message_id,
+                        reply_markup=markup
+                    )
+                _bot.answer_callback_query(call.id)
             
-            _bot.register_next_step_handler(msg, process_connect_code_input, tg_id)
+            # ─── دکمه پاک کردن کل کد ───
+            elif action == "code_clear":
+                data["code"] = ""
+                _temp_codes[tg_id] = data
+                
+                markup = get_code_keyboard("")
+                _bot.edit_message_reply_markup(
+                    chat_id=call.message.chat.id,
+                    message_id=call.message.message_id,
+                    reply_markup=markup
+                )
+                _bot.answer_callback_query(call.id)
             
-        except Exception as e:
-            logger.error(f"❌ خطا در callback_verify_connect_code: {e}")
-
-    def process_connect_code_input(message, tg_id):
-        try:
-            if message.text == "❌ لغو":
+            # ─── دکمه تأیید ───
+            elif action == "code_confirm":
+                code = data["code"]
+                
+                # بررسی طول کد
+                if len(code) != 5:
+                    _bot.answer_callback_query(call.id, f"⚠️ کد باید ۵ رقم باشد (در حال حاضر {len(code)} رقم)", show_alert=True)
+                    return
+                
+                _bot.answer_callback_query(call.id, "⏳ در حال تأیید کد...")
+                
+                # حذف کیبورد
+                _bot.edit_message_reply_markup(
+                    chat_id=call.message.chat.id,
+                    message_id=call.message.message_id,
+                    reply_markup=None
+                )
+                
+                # تأیید کد در بک‌گراند
+                def verify_code_async():
+                    try:
+                        async def _verify():
+                            cl = TelegramClient(
+                                StringSession(data["partial_sess"]),
+                                config.API_ID,
+                                config.API_HASH
+                            )
+                            await cl.connect()
+                            await cl.sign_in(
+                                phone=data["phone"],
+                                code=code,
+                                phone_code_hash=data["hash"]
+                            )
+                            me = await cl.get_me()
+                            sess = cl.session.save()
+                            await cl.disconnect()
+                            return {"tg_id": me.id, "first_name": me.first_name, "session": sess}
+                        
+                        result = _run_telethon_async(_verify())
+                        
+                        # ─── ثبت‌نام جدید ───
+                        if data["mode"] == "signup":
+                            # اطلاعات ثبت‌نام از _signup_states
+                            signup_data = _signup_states.get(tg_id, {})
+                            if not signup_data:
+                                _bot.send_message(call.message.chat.id, "❌ اطلاعات ثبت‌نام یافت نشد.")
+                                return
+                            
+                            username = signup_data["data"].get("username")
+                            password = signup_data["data"].get("password")
+                            
+                            if not username or not password:
+                                _bot.send_message(call.message.chat.id, "❌ اطلاعات کاربری ناقص است.")
+                                return
+                            
+                            # ایجاد حساب
+                            new_id = db.create_account(username, password)
+                            if not new_id:
+                                _bot.send_message(call.message.chat.id, "❌ خطا در ایجاد حساب.")
+                                return
+                            
+                            db.init_user_settings(new_id)
+                            db.save_telegram_user_id(new_id, result["tg_id"])
+                            db.save_session(new_id, result["session"], data["phone"])
+                            db.set_setting(new_id, "logged_in", "1")
+                            
+                            # پاک کردن داده‌های موقت
+                            _temp_codes.pop(tg_id, None)
+                            _signup_states.pop(tg_id, None)
+                            _telethon_clients.pop(tg_id, None)
+                            _phone_hashes.pop(tg_id, None)
+                            _phone_numbers.pop(tg_id, None)
+                            
+                            _bot.send_message(
+                                call.message.chat.id,
+                                f"✅ <b>ثبت‌نام با موفقیت انجام شد!</b>\n\n"
+                                f"👤 نام کاربری: <b>{username}</b>\n"
+                                f"💎 موجودی اولیه: <b>{config.WELCOME_TOKENS} الماس</b>\n\n"
+                                f"🎉 حالا می‌توانید از تمام قابلیت‌ها استفاده کنید!\n\n"
+                                f"💡 برای فعال‌سازی سلف، روی دکمه «🔌 فعال‌سازی سلف» کلیک کنید.",
+                                reply_markup=_user_keyboard()
+                            )
+                        
+                        # ─── اتصال حساب موجود ───
+                        elif data["mode"] == "connect":
+                            account_id = data["account_id"]
+                            if not account_id:
+                                _bot.send_message(call.message.chat.id, "❌ شناسه حساب یافت نشد.")
+                                return
+                            
+                            db.save_session(account_id, result["session"], data["phone"])
+                            db.set_setting(account_id, "logged_in", "1")
+                            db.save_telegram_user_id(account_id, result["tg_id"])
+                            
+                            # پاک کردن داده‌های موقت
+                            _temp_codes.pop(tg_id, None)
+                            _signup_states.pop(tg_id, None)
+                            _telethon_clients.pop(tg_id, None)
+                            _phone_hashes.pop(tg_id, None)
+                            _phone_numbers.pop(tg_id, None)
+                            
+                            _bot.send_message(
+                                call.message.chat.id,
+                                "✅ <b>اتصال با موفقیت انجام شد!</b>\n\n"
+                                "🎉 حالا می‌توانید سلف‌بات را فعال کنید.",
+                                reply_markup=_owner_keyboard() if tg_id == OWNER_TG_ID else _user_keyboard()
+                            )
+                    
+                    except SessionPasswordNeededError:
+                        # رمز دو مرحله‌ای
+                        _bot.send_message(
+                            call.message.chat.id,
+                            "🔐 حساب شما رمز دومرحله‌ای دارد.\n\n"
+                            "📝 مرحله ۴ از ۴:\n"
+                            "رمز دومرحله‌ای را وارد کنید:",
+                            reply_markup=types.ReplyKeyboardMarkup(resize_keyboard=True).add("❌ لغو")
+                        )
+                        _bot.register_next_step_handler(call.message, process_2fa_password, tg_id)
+                    
+                    except (PhoneCodeInvalidError, PhoneCodeExpiredError):
+                        _bot.send_message(
+                            call.message.chat.id,
+                            "❌ کد اشتباه یا منقضی شده.\n\n"
+                            "🔁 لطفاً دوباره تلاش کنید و /start بزنید."
+                        )
+                        _temp_codes.pop(tg_id, None)
+                    
+                    except Exception as e:
+                        _bot.send_message(
+                            call.message.chat.id,
+                            f"❌ خطا در تأیید کد:\n<code>{str(e)}</code>"
+                        )
+                        _temp_codes.pop(tg_id, None)
+                
+                threading.Thread(target=verify_code_async, daemon=True).start()
+            
+            # ─── دکمه لغو ───
+            elif action == "code_cancel":
+                _temp_codes.pop(tg_id, None)
                 _signup_states.pop(tg_id, None)
                 _telethon_clients.pop(tg_id, None)
                 _phone_hashes.pop(tg_id, None)
                 _phone_numbers.pop(tg_id, None)
-                _bot.reply_to(message, "❌ لغو شد.", reply_markup=types.ReplyKeyboardRemove())
-                return
-            
-            code = message.text.strip()
-            
-            if not code.isdigit() or len(code) < 4 or len(code) > 5:
-                _bot.reply_to(message, "❌ کد باید ۴ یا ۵ رقم باشد.\nدوباره تلاش کنید:")
-                return
-            
-            phone = _phone_numbers.get(tg_id)
-            ph = _phone_hashes.get(tg_id)
-            partial_sess = _signup_states[tg_id]["data"].get("partial_sess")
-            account_id = _signup_states[tg_id]["data"].get("account_id")
-            
-            if not phone or not ph or not partial_sess or not account_id:
-                _bot.reply_to(message, "❌ اطلاعات ناقص است.")
-                return
-            
-            _bot.reply_to(message, "⏳ در حال تأیید...", reply_markup=types.ReplyKeyboardRemove())
-            
-            def verify_code_async():
-                try:
-                    async def _verify():
-                        cl = TelegramClient(StringSession(partial_sess), config.API_ID, config.API_HASH)
-                        await cl.connect()
-                        await cl.sign_in(phone=phone, code=code, phone_code_hash=ph)
-                        me = await cl.get_me()
-                        sess = cl.session.save()
-                        await cl.disconnect()
-                        return {"tg_id": me.id, "session": sess}
-                    
-                    result = _run_telethon_async(_verify())
-                    
-                    db.save_session(account_id, result["session"], phone)
-                    db.set_setting(account_id, "logged_in", "1")
-                    db.save_telegram_user_id(account_id, result["tg_id"])
-                    
-                    _signup_states.pop(tg_id, None)
-                    _telethon_clients.pop(tg_id, None)
-                    _phone_hashes.pop(tg_id, None)
-                    _phone_numbers.pop(tg_id, None)
-                    
-                    _bot.send_message(
-                        message.chat.id,
-                        "✅ <b>اتصال با موفقیت انجام شد!</b>\n\n"
-                        "🎉 حالا می‌توانید سلف‌بات را فعال کنید.",
-                        reply_markup=_user_keyboard() if tg_id != OWNER_TG_ID else _owner_keyboard()
-                    )
-                except SessionPasswordNeededError:
-                    _signup_states[tg_id]["state"] = "connect_2fa"
-                    _bot.send_message(
-                        message.chat.id,
-                        "🔐 رمز دومرحله‌ای را وارد کنید:",
-                        reply_markup=types.ReplyKeyboardMarkup(resize_keyboard=True).add("❌ لغو")
-                    )
-                    _bot.register_next_step_handler(message, process_connect_2fa)
-                except Exception as e:
-                    _bot.send_message(message.chat.id, f"❌ خطا: {str(e)}")
-                    _signup_states.pop(tg_id, None)
-            
-            threading.Thread(target=verify_code_async, daemon=True).start()
+                
+                _bot.edit_message_text(
+                    "❌ عملیات لغو شد.",
+                    chat_id=call.message.chat.id,
+                    message_id=call.message.message_id,
+                    reply_markup=None
+                )
+                _bot.answer_callback_query(call.id)
+                
+                # بازگشت به منو
+                _bot.send_message(
+                    call.message.chat.id,
+                    "🔙 به منوی اصلی بازگشتید.",
+                    reply_markup=_owner_keyboard() if tg_id == OWNER_TG_ID else _user_keyboard()
+                )
+        
         except Exception as e:
-            logger.error(f"❌ خطا در process_connect_code_input: {e}")
+            logger.error(f"❌ خطا در callback_code_handler: {e}")
+            _bot.answer_callback_query(call.id, f"⚠️ خطا: {str(e)}", show_alert=True)
 
-    def process_connect_2fa(message):
+    # ─── تابع پردازش رمز دو مرحله‌ای ───
+    def process_2fa_password(message, tg_id):
         try:
-            tg_id = message.from_user.id
-            
             if message.text == "❌ لغو":
+                _temp_codes.pop(tg_id, None)
                 _signup_states.pop(tg_id, None)
                 _bot.reply_to(message, "❌ لغو شد.", reply_markup=types.ReplyKeyboardRemove())
                 return
             
             password_2fa = message.text.strip()
-            partial_sess = _signup_states[tg_id]["data"].get("partial_sess")
-            account_id = _signup_states[tg_id]["data"].get("account_id")
+            data = _temp_codes.get(tg_id)
             
-            if not partial_sess or not account_id:
-                _bot.reply_to(message, "❌ اطلاعات ناقص است.")
+            if not data:
+                _bot.reply_to(message, "❌ اطلاعات ناقص است. دوباره /start بزنید.")
                 return
             
-            _bot.reply_to(message, "⏳ در حال تأیید...")
+            _bot.reply_to(message, "⏳ در حال تأیید رمز دومرحله‌ای...", reply_markup=types.ReplyKeyboardRemove())
             
             def verify_2fa_async():
                 try:
                     async def _verify():
-                        cl = TelegramClient(StringSession(partial_sess), config.API_ID, config.API_HASH)
+                        cl = TelegramClient(
+                            StringSession(data["partial_sess"]),
+                            config.API_ID,
+                            config.API_HASH
+                        )
                         await cl.connect()
                         await cl.sign_in(password=password_2fa)
                         me = await cl.get_me()
                         sess = cl.session.save()
                         await cl.disconnect()
-                        return {"tg_id": me.id, "session": sess}
+                        return {"tg_id": me.id, "first_name": me.first_name, "session": sess}
                     
                     result = _run_telethon_async(_verify())
                     
-                    db.save_session(account_id, result["session"], _phone_numbers.get(tg_id))
-                    db.set_setting(account_id, "logged_in", "1")
-                    db.save_telegram_user_id(account_id, result["tg_id"])
+                    if data["mode"] == "signup":
+                        # ثبت‌نام با رمز دو مرحله‌ای
+                        signup_data = _signup_states.get(tg_id, {})
+                        if not signup_data:
+                            _bot.send_message(message.chat.id, "❌ اطلاعات ثبت‌نام یافت نشد.")
+                            return
+                        
+                        username = signup_data["data"].get("username")
+                        password = signup_data["data"].get("password")
+                        
+                        if not username or not password:
+                            _bot.send_message(message.chat.id, "❌ اطلاعات کاربری ناقص است.")
+                            return
+                        
+                        new_id = db.create_account(username, password)
+                        if not new_id:
+                            _bot.send_message(message.chat.id, "❌ خطا در ایجاد حساب.")
+                            return
+                        
+                        db.init_user_settings(new_id)
+                        db.save_telegram_user_id(new_id, result["tg_id"])
+                        db.save_session(new_id, result["session"], data["phone"])
+                        db.set_setting(new_id, "logged_in", "1")
+                        
+                        _temp_codes.pop(tg_id, None)
+                        _signup_states.pop(tg_id, None)
+                        
+                        _bot.send_message(
+                            message.chat.id,
+                            f"✅ <b>ثبت‌نام با موفقیت انجام شد!</b>\n\n"
+                            f"👤 نام کاربری: <b>{username}</b>\n"
+                            f"💎 موجودی اولیه: <b>{config.WELCOME_TOKENS} الماس</b>\n\n"
+                            f"🎉 حالا می‌توانید از تمام قابلیت‌ها استفاده کنید!",
+                            reply_markup=_user_keyboard()
+                        )
                     
-                    _signup_states.pop(tg_id, None)
-                    _telethon_clients.pop(tg_id, None)
-                    _phone_hashes.pop(tg_id, None)
-                    _phone_numbers.pop(tg_id, None)
-                    
-                    _bot.send_message(
-                        message.chat.id,
-                        "✅ <b>اتصال با موفقیت انجام شد!</b>",
-                        reply_markup=_user_keyboard() if tg_id != OWNER_TG_ID else _owner_keyboard()
-                    )
+                    elif data["mode"] == "connect":
+                        account_id = data["account_id"]
+                        if not account_id:
+                            _bot.send_message(message.chat.id, "❌ شناسه حساب یافت نشد.")
+                            return
+                        
+                        db.save_session(account_id, result["session"], data["phone"])
+                        db.set_setting(account_id, "logged_in", "1")
+                        db.save_telegram_user_id(account_id, result["tg_id"])
+                        
+                        _temp_codes.pop(tg_id, None)
+                        _signup_states.pop(tg_id, None)
+                        
+                        _bot.send_message(
+                            message.chat.id,
+                            "✅ <b>اتصال با موفقیت انجام شد!</b>\n\n"
+                            "🎉 حالا می‌توانید سلف‌بات را فعال کنید.",
+                            reply_markup=_owner_keyboard() if tg_id == OWNER_TG_ID else _user_keyboard()
+                        )
+                
                 except Exception as e:
                     _bot.send_message(message.chat.id, f"❌ خطا: {str(e)}")
-                    _signup_states.pop(tg_id, None)
+                    _temp_codes.pop(tg_id, None)
             
             threading.Thread(target=verify_2fa_async, daemon=True).start()
+        
         except Exception as e:
-            logger.error(f"❌ خطا در process_connect_2fa: {e}")
+            logger.error(f"❌ خطا در process_2fa_password: {e}")
+            _bot.reply_to(message, f"⚠️ خطا: {str(e)}")
 
     # ══════════════════════════════════════════════════════════════════════════
     # 🆕 فعال‌سازی سلف از ربات
